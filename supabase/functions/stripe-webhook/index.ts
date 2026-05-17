@@ -4,7 +4,6 @@ import { corsHeaders, json } from "../_shared/cors.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
   httpClient: Stripe.createFetchHttpClient(),
-  cryptoProvider: Stripe.createSubtleCryptoProvider(),
 });
 
 const supabaseAdmin = createClient(
@@ -58,7 +57,8 @@ Deno.serve(async (req) => {
   let event: Stripe.Event;
   try {
     const body = await req.text();
-    event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    const cryptoProvider = Stripe.createSubtleCryptoProvider();
+    event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret, undefined, cryptoProvider);
   } catch (e) {
     return json({ error: `Webhook signature verification failed: ${e.message}` }, 400);
   }
