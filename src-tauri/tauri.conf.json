@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Lyric Workspace",
+  "productName": "LYRIC WORKSPACE",
   "version": "1.0.0",
   "identifier": "com.shimin1080.lyric-workspace",
   "build": {
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Lyric Workspace",
+        "title": "LYRIC WORKSPACE",
         "width": 1280,
         "height": 820,
         "minWidth": 980,
