@@ -1,6 +1,6 @@
 {
-  "name": "Lyric Workspace",
-  "short_name": "Lyric WS",
+  "name": "LYRIC WORKSPACE",
+  "short_name": "LW",
   "description": "リリック制作ワークスペース",
   "start_url": "/",
   "display": "standalone",
