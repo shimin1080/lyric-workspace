@@ -1,0 +1,90 @@
+:root {
+  --sh-bg: #0a0a0d;
+  --sh-bg-2: #111116;
+  --sh-bg-3: #18181f;
+  --sh-border: #2a2a35;
+  --sh-border-2: #3a3a4a;
+  --sh-green: #4af0a0;
+  --sh-green-2: #2a9060;
+  --sh-green-3: #1a5040;
+  --sh-amber: #e8a840;
+  --sh-text: #c8ccd8;
+  --sh-text-2: #7a7e8e;
+  --sh-text-3: #4a4e5e;
+  --sh-red: #f06060;
+  --sh-mono: "Courier New", "JetBrains Mono", ui-monospace, Menlo, monospace;
+  --sh-jp: "Zen Kaku Gothic New", "Noto Sans JP", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+  background: var(--sh-bg);
+}
+
+body {
+  color: var(--sh-text);
+  font-family: var(--sh-mono);
+  -webkit-font-smoothing: antialiased;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, rgba(255, 255, 255, 0.012) 2px 3px);
+}
+
+::selection {
+  background: rgba(74, 240, 160, 0.22);
+  color: var(--sh-text);
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: var(--sh-mono);
+}
+
+button {
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--sh-green-2) !important;
+  color: var(--sh-green) !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--sh-green-2) !important;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--sh-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sh-border-2);
+  border: 2px solid var(--sh-bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sh-green-2);
+}

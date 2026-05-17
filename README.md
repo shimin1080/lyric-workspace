@@ -91,11 +91,25 @@ Vercelのプロジェクト → Settings → Environment Variables に追加:
 
 設定後にVercelで再デプロイ。
 
-### Step 5: メール認証設定（任意）
+### Step 5: Googleログイン設定
 
-デフォルトではSupabaseは確認メールを送信する。テスト時に面倒な場合:
+このアプリはGoogleアカウントのみでログインする。
+
 1. Supabaseダッシュボード → Authentication → Providers
-2. Email → 「Confirm email」をOFFにする
+2. Googleを有効化
+3. Google Cloud ConsoleでOAuth Client ID / Client Secretを作成
+4. SupabaseのGoogle ProviderにClient ID / Client Secretを設定
+5. SupabaseのAuthentication → URL ConfigurationにアプリのURLを追加
+
+ローカル開発では、Redirect URLsに以下を追加:
+
+```
+http://localhost:3000
+http://localhost:3000/
+lyric-workspace://auth/callback
+```
+
+Vercelにデプロイする場合は、本番URLもRedirect URLsに追加する。PCネイティブ版では、Googleログイン後に `lyric-workspace://auth/callback` でアプリへ戻る。
 
 ---
 
