@@ -2,9 +2,23 @@ import { supabase } from "./supabase.js";
 
 const BUCKET = "audio";
 const DESKTOP_AUTH_REDIRECT = "lyric-workspace://auth/callback";
-const GOOGLE_NATIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_ID || "";
+const GOOGLE_DESKTOP_CLIENT_ID = "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.apps.googleusercontent.com";
+const GOOGLE_WEB_DEFAULT_CLIENT_ID = "384809706283-9hfsce08oovfs5csiuem7i99qqna3guq.apps.googleusercontent.com";
+const GOOGLE_NATIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_ID || GOOGLE_DESKTOP_CLIENT_ID;
 const GOOGLE_NATIVE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_SECRET || "";
-const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.apps.googleusercontent.com";
+const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || GOOGLE_WEB_DEFAULT_CLIENT_ID;
+
+function resolvedNativeClientId() {
+  return GOOGLE_NATIVE_CLIENT_ID === GOOGLE_WEB_DEFAULT_CLIENT_ID ? GOOGLE_DESKTOP_CLIENT_ID : GOOGLE_NATIVE_CLIENT_ID;
+}
+
+function resolvedNativeClientSecret(clientId) {
+  return clientId === GOOGLE_DESKTOP_CLIENT_ID ? "" : GOOGLE_NATIVE_CLIENT_SECRET;
+}
+
+function resolvedWebClientId() {
+  return GOOGLE_WEB_CLIENT_ID === GOOGLE_DESKTOP_CLIENT_ID ? GOOGLE_WEB_DEFAULT_CLIENT_ID : GOOGLE_WEB_CLIENT_ID;
+}
 
 async function isTauriApp() {
   if (typeof window !== "undefined" && (window.__TAURI_INTERNALS__ || window.__TAURI__)) return true;
@@ -137,14 +151,16 @@ export async function syncAudioOnLogin(userId, audioLib, recLib, localLoadAudio,
 export async function signInWithGoogle() {
   if (!supabase) return { error: "Supabase未設定" };
   const desktop = await isTauriApp();
-  if (desktop && GOOGLE_NATIVE_CLIENT_ID) {
-    return signInWithNativeGoogle(GOOGLE_NATIVE_CLIENT_ID, GOOGLE_NATIVE_CLIENT_SECRET);
+  const nativeClientId = resolvedNativeClientId();
+  if (desktop && nativeClientId) {
+    return signInWithNativeGoogle(nativeClientId, resolvedNativeClientSecret(nativeClientId));
   }
   if (desktop) {
     return { error: "ネイティブアプリ用のGoogleログイン設定が不足しています。アプリを更新して再度ログインしてください。" };
   }
-  if (!desktop && GOOGLE_WEB_CLIENT_ID) {
-    const direct = await signInWithWebGoogle(GOOGLE_WEB_CLIENT_ID);
+  const webClientId = resolvedWebClientId();
+  if (!desktop && webClientId) {
+    const direct = await signInWithWebGoogle(webClientId);
     if (!direct.error) return direct;
     console.warn("Direct Google login failed:", direct.error);
     return { error: direct.error };
