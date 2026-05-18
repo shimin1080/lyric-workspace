@@ -28,17 +28,40 @@ async function isTauriApp() {
 // ── Data sync ─────────────────────────────────
 
 export async function pushToCloud(userId, data) {
-  if (!supabase || !userId) return false;
+  if (!supabase || !userId) return { ok: false };
   try {
+    const localUpdatedAt = Number(data?.__updatedAt || 0);
+    const localLastSyncedAt = Number(data?.__lastSyncedAt || 0);
+    const { data: existing, error: readError } = await supabase
+      .from("user_data")
+      .select("data, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (readError) { console.error("Push read error:", readError); return { ok: false, error: readError.message }; }
+    if (existing) {
+      const remoteUpdatedAt = Number(existing.data?.__updatedAt || 0) || Date.parse(existing.updated_at || "") || 0;
+      const isBasedOnOlderCloud = remoteUpdatedAt && (!localLastSyncedAt || localLastSyncedAt < remoteUpdatedAt);
+      const isOlderLocalSnapshot = remoteUpdatedAt && localUpdatedAt && localUpdatedAt < remoteUpdatedAt;
+      if (isBasedOnOlderCloud || isOlderLocalSnapshot) {
+        return {
+          ok: false,
+          conflict: true,
+          error: "Cloud data is newer than this local copy.",
+          remote: existing.data,
+          remoteUpdatedAt: existing.updated_at
+        };
+      }
+    }
+    const updatedAt = new Date().toISOString();
     const { error } = await supabase
       .from("user_data")
       .upsert(
-        { user_id: userId, data, updated_at: new Date().toISOString() },
+        { user_id: userId, data, updated_at: updatedAt },
         { onConflict: "user_id" }
       );
-    if (error) { console.error("Push error:", error); return false; }
-    return true;
-  } catch (e) { console.error("Push error:", e); return false; }
+    if (error) { console.error("Push error:", error); return { ok: false, error: error.message }; }
+    return { ok: true, updatedAt };
+  } catch (e) { console.error("Push error:", e); return { ok: false, error: e.message || String(e) }; }
 }
 
 export async function pullFromCloud(userId) {

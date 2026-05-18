@@ -79,28 +79,27 @@ export function useAuth(onRemoteData, onAudioSync) {
     await signOut(); setUser(null); setBilling({ profile: null, isPro: false, loading: false, error: null }); setSyncStatus("idle");
   };
 
-  // Debounced push (text data only, audio pushed separately)
   const push = useCallback(async (data) => {
-    if (!user) return;
+    if (!user) return { ok: false };
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
-    pushTimerRef.current = setTimeout(async () => {
-      ignoreNextRemote.current = true;
-      setSyncStatus("syncing");
-      const ok = await pushToCloud(user.id, data);
-      setSyncStatus(ok ? "synced" : "error");
-      setTimeout(() => setSyncStatus("idle"), 2000);
-    }, 1500);
+    ignoreNextRemote.current = true;
+    setSyncStatus("syncing");
+    const result = await pushToCloud(user.id, data);
+    setSyncStatus(result.ok ? "synced" : "error");
+    setTimeout(() => setSyncStatus("idle"), 2000);
+    return result;
   }, [user]);
 
   // Immediate push (no debounce) for destructive ops like trash empty
   const pushNow = useCallback(async (data) => {
-    if (!user) return;
+    if (!user) return { ok: false };
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     ignoreNextRemote.current = true;
     setSyncStatus("syncing");
-    const ok = await pushToCloud(user.id, data);
-    setSyncStatus(ok ? "synced" : "error");
+    const result = await pushToCloud(user.id, data);
+    setSyncStatus(result.ok ? "synced" : "error");
     setTimeout(() => setSyncStatus("idle"), 2000);
+    return result;
   }, [user]);
 
   // Audio cloud helpers (exposed for App/Mobile to call on upload/delete)

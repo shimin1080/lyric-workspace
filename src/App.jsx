@@ -45,6 +45,8 @@ const S_AP = "lyric-audio:";
 const S_RC = "lyric-rec:";
 const syncStamp = (data) => ({ ...data, __updatedAt: Date.now() });
 const syncTime = (data) => Number(data?.__updatedAt || 0);
+const syncedTime = (data) => Number(data?.__lastSyncedAt || 0);
+const markSynced = (data) => ({ ...data, __lastSyncedAt: syncTime(data) || Date.now() });
 const remoteTime = (data, updatedAt) => syncTime(data) || (updatedAt ? Date.parse(updatedAt) : 0) || 0;
 
 /* ── Helpers ───────────────────────────────── */
@@ -347,6 +349,7 @@ export default function LyricWorkspace() {
   const saveTimerRef = useRef(null);
   const stateRef = useRef({});
   const localUpdatedAtRef = useRef(0);
+  const localLastSyncedAtRef = useRef(0);
   const audioElRef = useRef(null);
   const fileInputRef = useRef(null);
   const audioCacheRef = useRef({});
@@ -359,7 +362,7 @@ export default function LyricWorkspace() {
   const sidebarPointerDragRef = useRef(null);
 
   // Always keep stateRef up to date for async push
-  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current };
+  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
   const showLimit = useCallback((message) => {
@@ -371,6 +374,8 @@ export default function LyricWorkspace() {
   useEffect(() => {
     remoteRef.current = async (data) => {
       const incomingTime = syncTime(data);
+      const hasUnsyncedLocal = localUpdatedAtRef.current > localLastSyncedAtRef.current;
+      if (hasUnsyncedLocal) return;
       if (incomingTime && localUpdatedAtRef.current && incomingTime < localUpdatedAtRef.current) return;
       if (data.projects) setProjects(data.projects);
       if (data.lyrics) setLyrics(data.lyrics);
@@ -385,7 +390,9 @@ export default function LyricWorkspace() {
       // Update stateRef + persist to localStorage immediately
       const merged = { ...stateRef.current, ...data };
       localUpdatedAtRef.current = syncTime(merged) || Date.now();
+      localLastSyncedAtRef.current = localUpdatedAtRef.current;
       merged.__updatedAt = localUpdatedAtRef.current;
+      merged.__lastSyncedAt = localLastSyncedAtRef.current;
       stateRef.current = merged;
       await _saveData(S_KEY, merged);
       if (user && (data.audioLib || data.recLib)) {
@@ -445,13 +452,14 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   // Auto-pull from cloud on restart if logged in
   const hasPulledRef = useRef(false);
   useEffect(() => {
-    if (authLoading || !user || hasPulledRef.current) return;
+    if (loading || authLoading || !user || hasPulledRef.current) return;
     hasPulledRef.current = true;
+    setLoading(true);
     (async () => {
       try {
         const { pullFromCloud, syncAudioOnLogin: sAOL } = await import("./sync.js");
@@ -459,11 +467,19 @@ export default function LyricWorkspace() {
         if (result.data) {
           const d = result.data;
           const cloudTime = remoteTime(d, result.updatedAt);
-          if (localUpdatedAtRef.current && cloudTime && localUpdatedAtRef.current > cloudTime) {
-            await pushNow(stateRef.current);
+          const hasUnsyncedLocal = localUpdatedAtRef.current > localLastSyncedAtRef.current;
+          if (hasUnsyncedLocal && localUpdatedAtRef.current > cloudTime) {
+            const pushResult = await pushNow(stateRef.current);
+            if (pushResult?.ok) {
+              const synced = markSynced(stateRef.current);
+              localLastSyncedAtRef.current = synced.__lastSyncedAt;
+              stateRef.current = synced;
+              await _saveData(S_KEY, synced);
+            }
             return;
           }
           localUpdatedAtRef.current = cloudTime || Date.now();
+          localLastSyncedAtRef.current = localUpdatedAtRef.current;
           if (d.projects) setProjects(d.projects);
           if (d.lyrics) setLyrics(d.lyrics);
           if (d.cards) setCards(d.cards);
@@ -475,12 +491,22 @@ export default function LyricWorkspace() {
           if (d.audioLib) setAudioLib(d.audioLib);
           if (d.recLib) setRecLib(d.recLib);
           await sAOL(user.id, d.audioLib || [], d.recLib || [], loadAudio, saveAudio, S_AP, S_RC, audioCacheRef);
-        } else if (localUpdatedAtRef.current) {
-          await pushNow(stateRef.current);
+          const synced = markSynced({ ...stateRef.current, ...d, __updatedAt: localUpdatedAtRef.current });
+          stateRef.current = synced;
+          await _saveData(S_KEY, synced);
+        } else if (localUpdatedAtRef.current > localLastSyncedAtRef.current) {
+          const pushResult = await pushNow(stateRef.current);
+          if (pushResult?.ok) {
+            const synced = markSynced(stateRef.current);
+            localLastSyncedAtRef.current = synced.__lastSyncedAt;
+            stateRef.current = synced;
+            await _saveData(S_KEY, synced);
+          }
         }
       } catch (e) { console.error("Auto-pull error:", e); }
+      finally { setLoading(false); }
     })();
-  }, [user, authLoading, pushNow]);
+  }, [user, loading, authLoading, pushNow]);
 
   // Save
   const doSave = useCallback((o = {}) => {
@@ -490,9 +516,17 @@ export default function LyricWorkspace() {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
       const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
-      if (user) { push(d); }
+      if (user) {
+        const pushResult = await push(d);
+        if (pushResult?.ok) {
+          const synced = markSynced(d);
+          localLastSyncedAtRef.current = synced.__lastSyncedAt;
+          await _saveData(S_KEY, synced);
+        }
+      }
       setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000);
     }, 800);
   }, [user, push]);
@@ -908,7 +942,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const resetData = { projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }; setProjects(resetData.projects); setLyrics(resetData.lyrics); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); if (user) { push(resetData); } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -949,8 +983,9 @@ export default function LyricWorkspace() {
     }
     const nt = trash.filter(t => t.id !== trashId); setTrash(nt);
     const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash: nt, projectList, projectFolders });
+    saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
-    await _saveData(S_KEY, saveData); if (user) await pushNow(saveData);
+    await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
   };
   // Trash: empty all
   const emptyTrash = async () => {
@@ -963,8 +998,9 @@ export default function LyricWorkspace() {
     }
     setTrash([]);
     const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash: [], projectList, projectFolders });
+    saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
-    await _saveData(S_KEY, saveData); if (user) await pushNow(saveData);
+    await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
   };
   const daysLeft = (deletedAt) => Math.max(0, 30 - Math.floor((Date.now() - deletedAt) / (24*60*60*1000)));
 
