@@ -197,11 +197,13 @@ export async function signInWithGoogle() {
 
 async function signInWithDesktopSupabaseGoogle() {
   try {
+    const { invoke } = await import("@tauri-apps/api/core");
     const { openUrl } = await import("@tauri-apps/plugin-opener");
+    const redirectTo = await invoke("start_supabase_oauth_callback");
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: DESKTOP_AUTH_REDIRECT,
+        redirectTo,
         skipBrowserRedirect: true,
         queryParams: {
           access_type: "offline",
@@ -212,7 +214,15 @@ async function signInWithDesktopSupabaseGoogle() {
     if (error) return { error: error.message };
     if (!data?.url) return { error: "GoogleログインURLを取得できませんでした" };
     await openUrl(data.url);
-    return { pending: true };
+    const callbackUrl = await invoke("finish_supabase_oauth_callback");
+    const url = new URL(callbackUrl);
+    const code = url.searchParams.get("code");
+    const authError = url.searchParams.get("error_description") || url.searchParams.get("error");
+    if (authError) return { error: authError };
+    if (!code) return { error: "Googleログインコードを取得できませんでした" };
+    const { data: sessionData, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) return { error: exchangeError.message };
+    return { user: sessionData?.user || null };
   } catch (e) {
     return { error: e?.message || String(e) || "Googleログインに失敗しました" };
   }

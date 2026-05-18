@@ -24,6 +24,10 @@ struct NativeGoogleOAuth {
   session: Mutex<Option<GoogleOAuthControl>>,
 }
 
+struct NativeSupabaseOAuth {
+  session: Mutex<Option<mpsc::Receiver<Result<String, String>>>>,
+}
+
 struct RecorderControl {
   stop_tx: mpsc::Sender<()>,
   done_rx: mpsc::Receiver<Result<NativeRecordingResult, String>>,
@@ -94,6 +98,14 @@ impl Default for NativeRecorder {
 }
 
 impl Default for NativeGoogleOAuth {
+  fn default() -> Self {
+    Self {
+      session: Mutex::new(None),
+    }
+  }
+}
+
+impl Default for NativeSupabaseOAuth {
   fn default() -> Self {
     Self {
       session: Mutex::new(None),
@@ -275,6 +287,44 @@ fn finish_google_oauth(state: tauri::State<'_, NativeGoogleOAuth>) -> Result<Goo
       .ok_or_else(|| "GoogleログインのIDトークンを取得できませんでした".to_string())?,
     access_token: token.access_token,
   })
+}
+
+#[tauri::command]
+fn start_supabase_oauth_callback(
+  state: tauri::State<'_, NativeSupabaseOAuth>,
+) -> Result<String, String> {
+  let redirect_uri = "http://127.0.0.1:53682/callback".to_string();
+  let listener = TcpListener::bind("127.0.0.1:53682")
+    .map_err(|e| format!("ログイン用のローカル受信口を開始できません: {e}"))?;
+  listener
+    .set_nonblocking(false)
+    .map_err(|e| format!("ログイン用の受信口を設定できません: {e}"))?;
+
+  let (tx, rx) = mpsc::channel();
+  thread::spawn(move || {
+    let _ = tx.send(wait_for_supabase_callback(listener));
+  });
+
+  let mut slot = state
+    .session
+    .lock()
+    .map_err(|_| "ログイン状態を開始できませんでした")?;
+  *slot = Some(rx);
+  Ok(redirect_uri)
+}
+
+#[tauri::command]
+fn finish_supabase_oauth_callback(
+  state: tauri::State<'_, NativeSupabaseOAuth>,
+) -> Result<String, String> {
+  let rx = state
+    .session
+    .lock()
+    .map_err(|_| "ログイン状態を取得できませんでした")?
+    .take()
+    .ok_or_else(|| "ログインが開始されていません".to_string())?;
+  rx.recv_timeout(Duration::from_secs(180))
+    .map_err(|_| "ログインがタイムアウトしました".to_string())?
 }
 
 fn run_recording_thread(
@@ -526,6 +576,51 @@ fn wait_for_google_callback(listener: TcpListener) -> Result<GoogleOAuthCallback
   Ok(GoogleOAuthCallback { code, state })
 }
 
+fn wait_for_supabase_callback(listener: TcpListener) -> Result<String, String> {
+  let (mut stream, _) = listener
+    .accept()
+    .map_err(|e| format!("ログインの戻りを受け取れません: {e}"))?;
+
+  let mut reader = BufReader::new(
+    stream
+      .try_clone()
+      .map_err(|e| format!("ログインの応答を準備できません: {e}"))?,
+  );
+  let mut request_line = String::new();
+  reader
+    .read_line(&mut request_line)
+    .map_err(|e| format!("ログインの応答を読めません: {e}"))?;
+
+  let path = request_line
+    .split_whitespace()
+    .nth(1)
+    .ok_or_else(|| "ログインの戻りURLを解析できません".to_string())?;
+  let callback_url = format!("http://127.0.0.1:53682{path}");
+
+  let body = r#"<!doctype html><html><head><meta charset="utf-8"><title>LYRIC WORKSPACE</title><style>
+    body{margin:0;min-height:100vh;background:#fff;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  </style><script>
+    window.close();
+    setTimeout(() => { document.body.innerHTML = ""; }, 100);
+  </script></head><body></body></html>"#;
+  let response = format!(
+    "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+    body.as_bytes().len(),
+    body
+  );
+  let _ = stream.write_all(response.as_bytes());
+
+  let parsed = url::Url::parse(&callback_url).map_err(|e| format!("ログインURLを解析できません: {e}"))?;
+  if let Some(error) = parsed
+    .query_pairs()
+    .find(|(key, _)| key == "error")
+    .map(|(_, value)| value.to_string())
+  {
+    return Err(format!("Googleログインがキャンセルされました: {error}"));
+  }
+  Ok(callback_url)
+}
+
 fn exchange_google_code(
   client_id: &str,
   client_secret: Option<&str>,
@@ -574,13 +669,16 @@ pub fn run() {
   tauri::Builder::default()
     .manage(NativeRecorder::default())
     .manage(NativeGoogleOAuth::default())
+    .manage(NativeSupabaseOAuth::default())
     .invoke_handler(tauri::generate_handler![
       list_native_input_devices,
       get_native_recording_status,
       start_native_recording,
       stop_native_recording,
       start_google_oauth,
-      finish_google_oauth
+      finish_google_oauth,
+      start_supabase_oauth_callback,
+      finish_supabase_oauth_callback
     ])
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_deep_link::init())
