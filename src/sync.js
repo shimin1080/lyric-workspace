@@ -6,7 +6,7 @@ const GOOGLE_DESKTOP_CLIENT_ID = "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.
 const GOOGLE_WEB_DEFAULT_CLIENT_ID = "384809706283-9hfsce08oovfs5csiuem7i99qqna3guq.apps.googleusercontent.com";
 const GOOGLE_NATIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_ID || GOOGLE_DESKTOP_CLIENT_ID;
 const GOOGLE_NATIVE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_SECRET || "";
-const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || GOOGLE_WEB_DEFAULT_CLIENT_ID;
+const GOOGLE_WEB_CLIENT_ID = GOOGLE_WEB_DEFAULT_CLIENT_ID;
 
 function resolvedNativeClientId() {
   return GOOGLE_NATIVE_CLIENT_ID === GOOGLE_WEB_DEFAULT_CLIENT_ID ? GOOGLE_DESKTOP_CLIENT_ID : GOOGLE_NATIVE_CLIENT_ID;
@@ -21,7 +21,13 @@ function resolvedWebClientId() {
 }
 
 async function isTauriApp() {
-  if (typeof window !== "undefined" && (window.__TAURI_INTERNALS__ || window.__TAURI__)) return true;
+  if (typeof window !== "undefined" && (
+    window.__TAURI_INTERNALS__ ||
+    window.__TAURI__ ||
+    window.isTauri ||
+    window.location.protocol === "tauri:"
+  )) return true;
+  if (typeof globalThis !== "undefined" && globalThis.isTauri) return true;
   try {
     const { isTauri } = await import("@tauri-apps/api/core");
     return typeof isTauri === "function" ? isTauri() : false;
