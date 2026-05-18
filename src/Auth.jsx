@@ -20,11 +20,11 @@ export function useAuth(onRemoteData, onAudioSync) {
   useEffect(() => {
     (async () => {
       try {
-        const u = await Promise.race([
-          getUser(),
-          new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+        const sessionResult = await Promise.race([
+          supabase?.auth.getSession(),
+          new Promise((resolve) => setTimeout(() => resolve({ data: { session: null } }), 10000)),
         ]);
-        setUser(u);
+        setUser(sessionResult?.data?.session?.user || await getUser());
       } catch (e) {
         setUser(null);
       } finally {

@@ -50,7 +50,7 @@ export async function pullFromCloud(userId) {
       .eq("user_id", userId)
       .maybeSingle();
     if (error) { console.error("Pull error:", error); return { data: null, error: error.message }; }
-    return { data: data?.data || null, error: null };
+    return { data: data?.data || null, updatedAt: data?.updated_at || null, error: null };
   } catch (e) { console.error("Pull error:", e); return { data: null, error: e.message }; }
 }
 
