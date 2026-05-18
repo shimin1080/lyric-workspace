@@ -4,6 +4,7 @@ const BUCKET = "audio";
 const DESKTOP_AUTH_REDIRECT = "lyric-workspace://auth/callback";
 const GOOGLE_NATIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_ID || "";
 const GOOGLE_NATIVE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_SECRET || "";
+const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.apps.googleusercontent.com";
 
 async function isTauriApp() {
   try {
@@ -138,6 +139,11 @@ export async function signInWithGoogle() {
   if (desktop && GOOGLE_NATIVE_CLIENT_ID) {
     return signInWithNativeGoogle(GOOGLE_NATIVE_CLIENT_ID, GOOGLE_NATIVE_CLIENT_SECRET);
   }
+  if (!desktop && GOOGLE_WEB_CLIENT_ID) {
+    const direct = await signInWithWebGoogle(GOOGLE_WEB_CLIENT_ID);
+    if (!direct.error) return direct;
+    console.warn("Direct Google login failed, falling back to Supabase OAuth:", direct.error);
+  }
 
   const redirectTo = desktop ? DESKTOP_AUTH_REDIRECT : window.location.origin + window.location.pathname;
   const { data, error } = await supabase.auth.signInWithOAuth({
@@ -161,6 +167,53 @@ export async function signInWithGoogle() {
     }
   }
   return { url: data.url };
+}
+
+function loadGoogleIdentityScript() {
+  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector("script[data-google-identity]");
+    if (existing) {
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", () => reject(new Error("Googleログインの読み込みに失敗しました")), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.dataset.googleIdentity = "true";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Googleログインの読み込みに失敗しました"));
+    document.head.appendChild(script);
+  });
+}
+
+async function signInWithWebGoogle(clientId) {
+  try {
+    await loadGoogleIdentityScript();
+    const tokenResponse = await new Promise((resolve, reject) => {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "openid email profile",
+        prompt: "select_account",
+        callback: (response) => {
+          if (response?.error) reject(new Error(response.error_description || response.error));
+          else resolve(response);
+        },
+        error_callback: (error) => reject(new Error(error?.message || error?.type || "Googleログインに失敗しました")),
+      });
+      client.requestAccessToken();
+    });
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: "google",
+      access_token: tokenResponse.access_token,
+    });
+    if (error) return { error: error.message };
+    return { user: data.user };
+  } catch (e) {
+    return { error: e?.message || String(e) || "Googleログインに失敗しました" };
+  }
 }
 
 async function signInWithNativeGoogle(clientId, clientSecret) {

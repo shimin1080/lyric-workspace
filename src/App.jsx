@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, loadAudio, deleteAudio, clearAllAudio } from "./storage.js";
-import { useAuth, AuthUI } from "./Auth.jsx";
+import { useAuth, AuthUI, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
 import { getNativeRecordingStatus, isNativeRecordingAvailable, listNativeInputDevices, startNativeRecording, stopNativeRecording } from "./nativeRecording.js";
 import { FREE_LIMITS } from "./billing.js";
@@ -442,7 +442,7 @@ export default function LyricWorkspace() {
   // Auto-pull from cloud on restart if logged in
   const hasPulledRef = useRef(false);
   useEffect(() => {
-    if (authLoading || !user || !isPro || hasPulledRef.current) return;
+    if (authLoading || !user || hasPulledRef.current) return;
     hasPulledRef.current = true;
     (async () => {
       try {
@@ -464,7 +464,7 @@ export default function LyricWorkspace() {
         }
       } catch (e) { console.error("Auto-pull error:", e); }
     })();
-  }, [user, authLoading, isPro]);
+  }, [user, authLoading]);
 
   // Save
   const doSave = useCallback((o = {}) => {
@@ -1137,7 +1137,8 @@ export default function LyricWorkspace() {
   }, [folderFlyout, projectFolders]);
   const onCtx = useCallback((e) => { e.preventDefault(); const s = window.getSelection().toString().trim(); if (s) { setSelText(s); setCtxMenu({ x: e.clientX, y: e.clientY }); } }, []);
 
-  if (loading) return (<div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0d", color: "#4a4e5e", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>// loading...</div>);
+  if (loading || authLoading) return (<div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0d", color: "#4a4e5e", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>// loading...</div>);
+  if (!user) return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} />;
 
   return (
     <div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", flexDirection: "column", background: "#0a0a0d", color: "#c8ccd8", overflow: "hidden", letterSpacing: "0.01em" }}>

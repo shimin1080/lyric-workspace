@@ -41,13 +41,13 @@ export function useAuth(onRemoteData, onAudioSync) {
   // Realtime subscription
   useEffect(() => {
     if (subRef.current) { subRef.current.unsubscribe(); subRef.current = null; }
-    if (!user || !billing.isPro) return;
+    if (!user) return;
     subRef.current = subscribeToChanges(user.id, (data) => {
       if (ignoreNextRemote.current) { ignoreNextRemote.current = false; return; }
       if (data && onRemoteData) { onRemoteData(data); setSyncStatus("synced"); setTimeout(() => setSyncStatus("idle"), 2000); }
     });
     return () => { if (subRef.current) { subRef.current.unsubscribe(); subRef.current = null; } };
-  }, [user, billing.isPro, onRemoteData]);
+  }, [user, onRemoteData]);
 
   const login = async () => {
     setSyncStatus("syncing");
@@ -69,7 +69,7 @@ export function useAuth(onRemoteData, onAudioSync) {
 
   // Debounced push (text data only, audio pushed separately)
   const push = useCallback(async (data) => {
-    if (!user || !billing.isPro) return;
+    if (!user) return;
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(async () => {
       ignoreNextRemote.current = true;
@@ -78,27 +78,27 @@ export function useAuth(onRemoteData, onAudioSync) {
       setSyncStatus(ok ? "synced" : "error");
       setTimeout(() => setSyncStatus("idle"), 2000);
     }, 1500);
-  }, [user, billing.isPro]);
+  }, [user]);
 
   // Immediate push (no debounce) for destructive ops like trash empty
   const pushNow = useCallback(async (data) => {
-    if (!user || !billing.isPro) return;
+    if (!user) return;
     if (pushTimerRef.current) clearTimeout(pushTimerRef.current);
     ignoreNextRemote.current = true;
     setSyncStatus("syncing");
     const ok = await pushToCloud(user.id, data);
     setSyncStatus(ok ? "synced" : "error");
     setTimeout(() => setSyncStatus("idle"), 2000);
-  }, [user, billing.isPro]);
+  }, [user]);
 
   // Audio cloud helpers (exposed for App/Mobile to call on upload/delete)
   const pushAudio = useCallback(async (audioId, base64) => {
-    if (!user || !billing.isPro) return; await uploadAudioToCloud(user.id, audioId, base64);
-  }, [user, billing.isPro]);
+    if (!user) return; await uploadAudioToCloud(user.id, audioId, base64);
+  }, [user]);
 
   const removeAudio = useCallback(async (audioId) => {
-    if (!user || !billing.isPro) return; await deleteAudioFromCloud(user.id, audioId);
-  }, [user, billing.isPro]);
+    if (!user) return; await deleteAudioFromCloud(user.id, audioId);
+  }, [user]);
 
   const startUpgrade = useCallback(async () => {
     const result = await createCheckoutSession();
@@ -164,14 +164,14 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billi
           <span style={{ fontSize: 12, color: isPro ? "#4af0a0" : "#c8ccd8", fontWeight: 600 }}>{isPro ? "Pro" : "Free"}</span>
           {billingStatus && <span style={{ fontSize: 9, color: "#7a7e8e", fontFamily: "'JetBrains Mono', monospace" }}>{billingStatus}</span>}
         </div>
-        <div style={{ fontSize: 11, color: "#7a7e8e", lineHeight: 1.5, marginBottom: 10 }}>{isPro ? "すべての機能とクラウド同期が利用できます。" : "Freeは5プロジェクト、音源3曲、録音3件、ローカル保存のみです。"}</div>
+        <div style={{ fontSize: 11, color: "#7a7e8e", lineHeight: 1.5, marginBottom: 10 }}>{isPro ? "すべての機能とクラウド同期が利用できます。" : "Freeは5プロジェクト、音源3曲、録音3件まで。同じGoogleアカウントで同期できます。"}</div>
         {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 8 }}>{error}</div>}
         <div style={{ display: "flex", gap: 6 }}>
           {isPro ? <button onClick={handleManage} disabled={billingLoading} style={{ flex: 1, padding: "8px 0", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: "#c8ccd8", fontSize: 11, cursor: "pointer", fontFamily: ff }}>支払い管理</button> : <button onClick={handleUpgrade} disabled={billingLoading} style={{ flex: 1, padding: "8px 0", borderRadius: 2, border: "none", background: "#4af0a0", color: "#111116", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: ff }}>Proにする（月500円）</button>}
           <button onClick={onRefreshBilling} disabled={billingLoading || billing?.loading} style={{ padding: "8px 10px", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: "#7a7e8e", fontSize: 11, cursor: "pointer", fontFamily: ff }}>更新</button>
         </div>
       </div>
-      {isPro ? <SyncBadge syncStatus={syncStatus} user={user} /> : <div style={{ fontSize: 10, color: "#4a4e5e", fontFamily: "'JetBrains Mono', monospace" }}>ローカル保存</div>}
+      <SyncBadge syncStatus={syncStatus} user={user} />
       <button onClick={onLogout} style={{ width: "100%", padding: "10px 0", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: "#7a7e8e", fontSize: 13, cursor: "pointer", fontFamily: ff, marginTop: 12 }}>ログアウト</button>
     </div>);
   }
@@ -192,4 +192,19 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billi
       {loading ? "Googleへ接続中..." : "Googleでログイン"}
     </button>
   </div>);
+}
+
+export function AuthGate({ user, onLogin, onLogout, syncStatus, hasSupabase, billing, onUpgrade, onManageBilling, onRefreshBilling }) {
+  return (
+    <div style={{ fontFamily: ff, minHeight: "100vh", width: "100%", display: "grid", placeItems: "center", background: "#0a0a0d", color: "#c8ccd8", padding: 20, boxSizing: "border-box" }}>
+      <div style={{ width: "100%", maxWidth: 420, border: "1px solid #2a2a35", background: "#111116", borderRadius: 2, boxShadow: "0 24px 64px rgba(0,0,0,0.45)", overflow: "hidden" }}>
+        <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #2a2a35" }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#4af0a0", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>// LYRIC WORKSPACE</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#c8ccd8", marginBottom: 8 }}>Googleログインが必要です</div>
+          <div style={{ fontSize: 12, color: "#7a7e8e", lineHeight: 1.7 }}>同じGoogleアカウントで、PC・モバイル・ネイティブアプリ間のデータと音源を同期します。</div>
+        </div>
+        <AuthUI user={user} onLogin={onLogin} onLogout={onLogout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={onUpgrade} onManageBilling={onManageBilling} onRefreshBilling={onRefreshBilling} />
+      </div>
+    </div>
+  );
 }

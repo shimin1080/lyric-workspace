@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, loadAudio, deleteAudio, clearAllAudio } from "./storage.js";
-import { useAuth, AuthUI, SyncBadge } from "./Auth.jsx";
+import { useAuth, AuthUI, SyncBadge, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
 import { FREE_LIMITS } from "./billing.js";
 
@@ -55,7 +55,6 @@ function findSection(text,sel){const idx=text.indexOf(sel);if(idx===-1)return"�
 
 const DEF_PROJECTS=[{id:"proj_1",title:"New Project",emoji:"🎵"}];
 const DEF_LYRICS={"proj_1":""};
-const EMOJI_OPTS=["🎵","🎤","🔥","🧊","🏚️","🏀","💀","🌙","🚬","📻","🎹","🌊","⚡","🍵"];
 
 const ff="'Courier New','JetBrains Mono',ui-monospace,Menlo,monospace";const mf=ff;
 
@@ -76,6 +75,7 @@ export default function MobileApp(){
   const[activeTrackId,setActiveTrackId]=useState(null);
   const[memo,setMemo]=useState({});
   const[projectList,setProjectList]=useState([]);
+  const[projectFolders,setProjectFolders]=useState([]);
 
   const[tab,setTab]=useState("editor");
   const[isPlaying,setIsPlaying]=useState(false);const[isMuted,setIsMuted]=useState(false);
@@ -85,7 +85,9 @@ export default function MobileApp(){
   const[isRecording,setIsRecording]=useState(false);
   const[saveStatus,setSaveStatus]=useState("idle");
   const[showPlayer,setShowPlayer]=useState(false);
-  const[showNewProj,setShowNewProj]=useState(false);const[newProjTitle,setNewProjTitle]=useState("");const[newProjEmoji,setNewProjEmoji]=useState("🎵");
+  const[showNewProj,setShowNewProj]=useState(false);const[newProjTitle,setNewProjTitle]=useState("");
+  const[showNewFolder,setShowNewFolder]=useState(false);const[newFolderTitle,setNewFolderTitle]=useState("");
+  const[projectQuery,setProjectQuery]=useState("");
   const[showScrapInput,setShowScrapInput]=useState(false);const[scrapInputText,setScrapInputText]=useState("");const[scrapInputTags,setScrapInputTags]=useState("");
   const[tagFilter,setTagFilter]=useState("all");
   const[selText,setSelText]=useState("");const[showSelBar,setShowSelBar]=useState(false);
@@ -106,11 +108,11 @@ export default function MobileApp(){
   const btn={background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
 
   // Always keep stateRef up to date for async push
-  stateRef.current={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash,projectList};
+  stateRef.current={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash,projectList,projectFolders};
 
   // Remote sync callback
   useEffect(()=>{
-    remoteRef.current=async(data)=>{if(data.projects)setProjects(data.projects);if(data.lyrics)setLyrics(data.lyrics);if(data.cards)setCards(data.cards);if(data.activeProj)setActiveProj(data.activeProj);if(data.memo)setMemo(data.memo);if(data.trash)setTrash(data.trash);if(data.projectList)setProjectList(data.projectList);if(data.audioLib)setAudioLib(data.audioLib);if(data.recLib)setRecLib(data.recLib);const merged={...stateRef.current,...data};stateRef.current=merged;await saveAppData(merged);if(user&&(data.audioLib||data.recLib)){await syncAudioOnLogin(user.id,data.audioLib||[],data.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);}};
+    remoteRef.current=async(data)=>{if(data.projects)setProjects(data.projects);if(data.lyrics)setLyrics(data.lyrics);if(data.cards)setCards(data.cards);if(data.activeProj)setActiveProj(data.activeProj);if(data.memo)setMemo(data.memo);if(data.trash)setTrash(data.trash);if(data.projectList)setProjectList(data.projectList);if(data.projectFolders)setProjectFolders(data.projectFolders);if(data.audioLib)setAudioLib(data.audioLib);if(data.recLib)setRecLib(data.recLib);const merged={...stateRef.current,...data};stateRef.current=merged;await saveAppData(merged);if(user&&(data.audioLib||data.recLib)){await syncAudioOnLogin(user.id,data.audioLib||[],data.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);}};
     audioSyncRef.current=async(userId,aLib,rLib)=>{await syncAudioOnLogin(userId,aLib,rLib,loadAudio,saveAudio,S_AP,S_RC,audioCache);setAudioLib(aLib);setRecLib(rLib);};
   });
 
@@ -118,18 +120,24 @@ export default function MobileApp(){
   useEffect(()=>{const a=new Audio();a.preload="metadata";a.addEventListener("timeupdate",()=>{setCurTime(a.currentTime);if(a.duration)setSeekPos((a.currentTime/a.duration)*100);});a.addEventListener("loadedmetadata",()=>{if(a.duration===Infinity||isNaN(a.duration)){a.currentTime=1e101;const fix=()=>{a.currentTime=0;setDur(a.duration);a.removeEventListener("timeupdate",fix);};a.addEventListener("timeupdate",fix);}else{setDur(a.duration);}});a.addEventListener("ended",()=>{if(a.loop)return;setIsPlaying(false);setSeekPos(0);setCurTime(0);});audioEl.current=a;return()=>{a.pause();a.src="";};},[]);
 
   /* ── Load ── */
-  useEffect(()=>{(async()=>{try{const d=await loadAppData();if(d){d.projects&&setProjects(d.projects);d.lyrics&&setLyrics(d.lyrics);d.cards&&setCards(d.cards);d.activeProj&&setActiveProj(d.activeProj);d.audioLib&&setAudioLib(d.audioLib);d.recLib&&setRecLib(d.recLib);d.memo&&setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);}}catch(e){console.error("Load error:",e);}setLoading(false);})();},[]);
+  useEffect(()=>{(async()=>{try{const d=await loadAppData();if(d){d.projects&&setProjects(d.projects);d.lyrics&&setLyrics(d.lyrics);d.cards&&setCards(d.cards);d.activeProj&&setActiveProj(d.activeProj);d.audioLib&&setAudioLib(d.audioLib);d.recLib&&setRecLib(d.recLib);d.memo&&setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.projectFolders)setProjectFolders(d.projectFolders);}}catch(e){console.error("Load error:",e);}setLoading(false);})();},[]);
 
   // Auto-pull from cloud on restart if logged in
   const hasPulledRef=useRef(false);
-  useEffect(()=>{if(authLoading||!user||!isPro||hasPulledRef.current)return;hasPulledRef.current=true;(async()=>{try{const{pullFromCloud}=await import("./sync.js");const result=await pullFromCloud(user.id);if(result.data){const d=result.data;if(d.projects)setProjects(d.projects);if(d.lyrics)setLyrics(d.lyrics);if(d.cards)setCards(d.cards);if(d.activeProj)setActiveProj(d.activeProj);if(d.memo)setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.audioLib){setAudioLib(d.audioLib);}if(d.recLib){setRecLib(d.recLib);}const{syncAudioOnLogin:sAOL}=await import("./sync.js");await sAOL(user.id,d.audioLib||[],d.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);}}catch(e){console.error("Auto-pull error:",e);}})();},[user,authLoading,isPro]);
+  useEffect(()=>{if(authLoading||!user||hasPulledRef.current)return;hasPulledRef.current=true;(async()=>{try{const{pullFromCloud}=await import("./sync.js");const result=await pullFromCloud(user.id);if(result.data){const d=result.data;if(d.projects)setProjects(d.projects);if(d.lyrics)setLyrics(d.lyrics);if(d.cards)setCards(d.cards);if(d.activeProj)setActiveProj(d.activeProj);if(d.memo)setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.projectFolders)setProjectFolders(d.projectFolders);if(d.audioLib){setAudioLib(d.audioLib);}if(d.recLib){setRecLib(d.recLib);}const{syncAudioOnLogin:sAOL}=await import("./sync.js");await sAOL(user.id,d.audioLib||[],d.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);}}catch(e){console.error("Auto-pull error:",e);}})();},[user,authLoading]);
 
   /* ── Save ── */
-  const doSave=useCallback((o={})=>{if(saveTimer.current)clearTimeout(saveTimer.current);setSaveStatus("saving");saveTimer.current=setTimeout(async()=>{const s=stateRef.current;const d={projects:o.projects||s.projects,lyrics:o.lyrics||s.lyrics,cards:o.cards||s.cards,activeProj:o.activeProj||s.activeProj,audioLib:o.audioLib||s.audioLib,recLib:o.recLib||s.recLib,memo:o.memo||s.memo,trash:o.trash||s.trash,projectList:o.projectList||s.projectList};await saveAppData(d);if(user){push(d);}setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),1500);},800);},[user,push]);
+  const doSave=useCallback((o={})=>{if(saveTimer.current)clearTimeout(saveTimer.current);setSaveStatus("saving");saveTimer.current=setTimeout(async()=>{const s=stateRef.current;const d={projects:o.projects||s.projects,lyrics:o.lyrics||s.lyrics,cards:o.cards||s.cards,activeProj:o.activeProj||s.activeProj,audioLib:o.audioLib||s.audioLib,recLib:o.recLib||s.recLib,memo:o.memo||s.memo,trash:o.trash||s.trash,projectList:o.projectList||s.projectList,projectFolders:o.projectFolders||s.projectFolders};await saveAppData(d);if(user){push(d);}setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),1500);},800);},[user,push]);
 
   const curText=lyrics[activeProj]||"";
   const setCurText=t=>{const nl={...lyrics,[activeProj]:t};setLyrics(nl);doSave({lyrics:nl});};
-  const curProject=projects.find(p=>p.id===activeProj)||projectList.find(p=>p.id===activeProj);
+  const allProjects=[...projects,...projectList.filter(p=>!projects.some(x=>x.id===p.id))];
+  const folderProjectIds=new Set(projectFolders.flatMap(f=>f.projectIds||[]));
+  const rootProjects=allProjects.filter(p=>!folderProjectIds.has(p.id));
+  const q=projectQuery.trim().toLowerCase();
+  const visibleRootProjects=rootProjects.filter(p=>!q||p.title.toLowerCase().includes(q));
+  const visibleFolders=projectFolders.map(f=>({...f,items:(f.projectIds||[]).map(id=>allProjects.find(p=>p.id===id)).filter(Boolean).filter(p=>!q||p.title.toLowerCase().includes(q)||f.title.toLowerCase().includes(q))})).filter(f=>!q||f.title.toLowerCase().includes(q)||f.items.length>0);
+  const curProject=allProjects.find(p=>p.id===activeProj);
   const curMemo=memo[activeProj]||"";
   const setCurMemo=t=>{const nm={...memo,[activeProj]:t};setMemo(nm);doSave({memo:nm});};
   const allTags=[...new Set(cards.filter(c=>c.projId===activeProj).flatMap(c=>c.tags))];
@@ -137,14 +145,20 @@ export default function MobileApp(){
   const sections=[];curText.split("\n").forEach(l=>{const lb=getSecLabel(l);if(lb)sections.push({label:lb,color:getSecColor(l)});});
 
   const switchProject=id=>{setActiveProj(id);setTagFilter("all");setProjPickerOpen(false);doSave({activeProj:id});};
-  const addProject=()=>{if(!newProjTitle.trim())return;if(!isPro&&projects.length+projectList.length>=FREE_LIMITS.projects){alert("Free版ではプロジェクトは5件までです。Proにすると無制限で作成できます。");setTab("settings");return;}const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim(),emoji:newProjEmoji}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");setNewProjEmoji("🎵");doSave({projects:np,lyrics:nl,activeProj:id});};
-  const deleteProject=id=>{const proj=projects.find(p=>p.id===id)||projectList.find(p=>p.id===id);if(!proj||proj.locked)return;if(projects.find(p=>p.id===id)&&projects.length<=1)return;const trashItem={id:"tr_"+Date.now(),type:"project",data:{project:proj,lyrics:lyrics[id],cards:cards.filter(c=>c.projId===id),memo:memo[id]},deletedAt:Date.now()};const nt=[...trash,trashItem];const np=projects.filter(p=>p.id!==id);const npl=projectList.filter(p=>p.id!==id);const nl={...lyrics};delete nl[id];const nc=cards.filter(c=>c.projId!==id);const na=id===activeProj?(np[0]||npl[0])?.id||"proj_1":activeProj;const nm={...memo};delete nm[id];setTrash(nt);setProjects(np);setProjectList(npl);setLyrics(nl);setCards(nc);setActiveProj(na);setMemo(nm);doSave({trash:nt,projects:np,projectList:npl,lyrics:nl,cards:nc,activeProj:na,memo:nm});};
+  const addProject=()=>{if(!newProjTitle.trim())return;if(!isPro&&allProjects.length>=FREE_LIMITS.projects){alert("Free版ではプロジェクトは5件までです。Proにすると無制限で作成できます。");setTab("settings");return;}const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
+  const addFolder=()=>{if(!newFolderTitle.trim())return;const nf=[...projectFolders,{id:"folder_"+Date.now(),title:newFolderTitle.trim(),projectIds:[],open:true,locked:false}];setProjectFolders(nf);setShowNewFolder(false);setNewFolderTitle("");doSave({projectFolders:nf});};
+  const toggleFolderLock=id=>{const nf=projectFolders.map(f=>f.id===id?{...f,locked:!f.locked}:f);setProjectFolders(nf);doSave({projectFolders:nf});};
+  const deleteFolder=id=>{const folder=projectFolders.find(f=>f.id===id);if(folder?.locked)return;const nf=projectFolders.filter(f=>f.id!==id);setProjectFolders(nf);doSave({projectFolders:nf});};
+  const moveProjectToFolder=(projectId,folderId)=>{const nf=projectFolders.map(f=>({...f,projectIds:(f.projectIds||[]).filter(id=>id!==projectId)})).map(f=>f.id===folderId?{...f,projectIds:[...(f.projectIds||[]),projectId],open:true}:f);setProjectFolders(nf);doSave({projectFolders:nf});};
+  const moveProjectToRoot=projectId=>{const nf=projectFolders.map(f=>({...f,projectIds:(f.projectIds||[]).filter(id=>id!==projectId)}));setProjectFolders(nf);doSave({projectFolders:nf});};
+  const deleteProject=id=>{const proj=allProjects.find(p=>p.id===id);if(!proj||proj.locked||allProjects.length<=1)return;const trashItem={id:"tr_"+Date.now(),type:"project",data:{project:proj,lyrics:lyrics[id],cards:cards.filter(c=>c.projId===id),memo:memo[id]},deletedAt:Date.now()};const nt=[...trash,trashItem];const np=projects.filter(p=>p.id!==id);const npl=projectList.filter(p=>p.id!==id);const nf=projectFolders.map(f=>({...f,projectIds:(f.projectIds||[]).filter(pid=>pid!==id)}));const nl={...lyrics};delete nl[id];const nc=cards.filter(c=>c.projId!==id);const na=id===activeProj?(np[0]||npl[0])?.id||"proj_1":activeProj;const nm={...memo};delete nm[id];setTrash(nt);setProjects(np);setProjectList(npl);setProjectFolders(nf);setLyrics(nl);setCards(nc);setActiveProj(na);setMemo(nm);doSave({trash:nt,projects:np,projectList:npl,projectFolders:nf,lyrics:nl,cards:nc,activeProj:na,memo:nm});};
   const renameProject=(id,n)=>{const np=projects.map(p=>p.id===id?{...p,title:n}:p);const npl=projectList.map(p=>p.id===id?{...p,title:n}:p);setProjects(np);setProjectList(npl);doSave({projects:np,projectList:npl});};
   const toggleLock=(id)=>{const np=projects.map(p=>p.id===id?{...p,locked:!p.locked}:p);const npl=projectList.map(p=>p.id===id?{...p,locked:!p.locked}:p);setProjects(np);setProjectList(npl);doSave({projects:np,projectList:npl});};
   const moveToList=(id)=>{const p=projects.find(x=>x.id===id);if(!p||projects.length<=1)return;const np=projects.filter(x=>x.id!==id);const npl=[...projectList,p];setProjects(np);setProjectList(npl);if(activeProj===id)setActiveProj(np[0].id);doSave({projects:np,projectList:npl});};
   const moveToProjects=(id)=>{const p=projectList.find(x=>x.id===id);if(!p)return;const npl=projectList.filter(x=>x.id!==id);const np=[...projects,p];setProjects(np);setProjectList(npl);doSave({projects:np,projectList:npl});};
   const reorderArr=(arr,setArr,key,idx,dir)=>{const n=[...arr];const ni=idx+dir;if(ni<0||ni>=n.length)return;[n[idx],n[ni]]=[n[ni],n[idx]];setArr(n);doSave({[key]:n});};
-  const allProjs=[...projects,...projectList];
+  const activeFolder=projectFolders.find(f=>(f.projectIds||[]).includes(activeProj));
+  const allProjs=activeFolder?(activeFolder.projectIds||[]).map(id=>allProjects.find(p=>p.id===id)).filter(Boolean):rootProjects;
   const swipeNav=(dir)=>{const idx=allProjs.findIndex(p=>p.id===activeProj);const ni=idx+dir;if(ni>=0&&ni<allProjs.length){switchProject(allProjs[ni].id);}};
 
   /* ── Scrap ── */
@@ -161,8 +175,8 @@ export default function MobileApp(){
 
   // Trash functions
   const restoreFromTrash=(trashId)=>{const item=trash.find(t=>t.id===trashId);if(!item)return;const nt=trash.filter(t=>t.id!==trashId);if(item.type==="project"){const d=item.data;const np=[...projects,d.project];const nl={...lyrics,[d.project.id]:d.lyrics||""};const nc=[...cards,...(d.cards||[])];const nm={...memo,[d.project.id]:d.memo||""};setProjects(np);setLyrics(nl);setCards(nc);setMemo(nm);setTrash(nt);doSave({trash:nt,projects:np,lyrics:nl,cards:nc,memo:nm});}else{const track=item.data.track;if(item.type==="audio"){const nal=[...audioLib,track];setAudioLib(nal);setTrash(nt);doSave({trash:nt,audioLib:nal});}else{const nrl=[...recLib,track];setRecLib(nrl);setTrash(nt);doSave({trash:nt,recLib:nrl});}}};
-  const permanentDeleteTrash=async(trashId)=>{const item=trash.find(t=>t.id===trashId);if(!item)return;if(item.type==="audio"||item.type==="recording"){const track=item.data.track;const prefix=item.type==="audio"?S_AP:S_RC;await deleteAudio(prefix+track.id);delete audioCache.current[track.id];await removeAudio(track.id);}const nt=trash.filter(t=>t.id!==trashId);setTrash(nt);const sd={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash:nt,projectList};await saveAppData(sd);if(user)await pushNow(sd);};
-  const emptyTrash=async()=>{for(const item of trash){if(item.type==="audio"||item.type==="recording"){const track=item.data.track;const prefix=item.type==="audio"?S_AP:S_RC;await deleteAudio(prefix+track.id);delete audioCache.current[track.id];await removeAudio(track.id);}}setTrash([]);const sd={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash:[],projectList};await saveAppData(sd);if(user)await pushNow(sd);};
+  const permanentDeleteTrash=async(trashId)=>{const item=trash.find(t=>t.id===trashId);if(!item)return;if(item.type==="audio"||item.type==="recording"){const track=item.data.track;const prefix=item.type==="audio"?S_AP:S_RC;await deleteAudio(prefix+track.id);delete audioCache.current[track.id];await removeAudio(track.id);}const nt=trash.filter(t=>t.id!==trashId);setTrash(nt);const sd={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash:nt,projectList,projectFolders};await saveAppData(sd);if(user)await pushNow(sd);};
+  const emptyTrash=async()=>{for(const item of trash){if(item.type==="audio"||item.type==="recording"){const track=item.data.track;const prefix=item.type==="audio"?S_AP:S_RC;await deleteAudio(prefix+track.id);delete audioCache.current[track.id];await removeAudio(track.id);}}setTrash([]);const sd={projects,lyrics,cards,activeProj,audioLib,recLib,memo,trash:[],projectList,projectFolders};await saveAppData(sd);if(user)await pushNow(sd);};
   const daysLeft=(deletedAt)=>Math.max(0,30-Math.floor((Date.now()-deletedAt)/(24*60*60*1000)));
   const renameTrk=(lib,setLib,key,id,n)=>{const nl=lib.map(t=>t.id===id?{...t,name:n}:t);setLib(nl);if(activeTrackId===id)setTrackName(n);doSave({[key]:nl});};
   const toggleTrackLock=(lib,setLib,key,id)=>{const nl=lib.map(t=>t.id===id?{...t,locked:!t.locked}:t);setLib(nl);doSave({[key]:nl});};
@@ -186,7 +200,8 @@ export default function MobileApp(){
 
   const hasSrc=!!activeTrackId;
 
-  if(loading)return(<div style={{fontFamily:ff,position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0a",color:"#7a7e8e",fontSize:14}}>読み込み中...</div>);
+  if(loading||authLoading)return(<div style={{fontFamily:ff,position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0a",color:"#7a7e8e",fontSize:14}}>読み込み中...</div>);
+  if(!user)return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling}/>;
 
   return(
     <div style={{fontFamily:ff,position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",background:"#0a0a0a",color:"#c8ccd8",overflow:"hidden",maxWidth:480,margin:"0 auto"}}>
@@ -197,13 +212,10 @@ export default function MobileApp(){
         <div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}>
           <button onClick={()=>swipeNav(-1)} style={{...btn,padding:4,color:allProjs.findIndex(p=>p.id===activeProj)>0?"#7a7e8e":"#2a2a35",flexShrink:0}}><ChevronLeft size={16}/></button>
           <button onClick={()=>setProjPickerOpen(!projPickerOpen)} style={{...btn,gap:8,flex:1,minWidth:0}}>
-            <span style={{fontSize:20,flexShrink:0}}>{curProject?.emoji||"🎵"}</span>
+            <FileText size={16} color="#7a7e8e" style={{flexShrink:0}}/>
             <div style={{textAlign:"left",minWidth:0,flex:1}}>
               <div style={{fontSize:15,fontWeight:600,color:"#c8ccd8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{curProject?.title||"無題"}</div>
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                <div style={{fontSize:10,color:saveStatus==="saving"?"#4af0a0":"#4a4e5e",fontFamily:mf}}>{saveStatus==="saving"?"保存中...":"自動保存"}</div>
-                {user&&<SyncBadge syncStatus={syncStatus} user={user}/>}
-              </div>
+              <div style={{fontSize:10,color:saveStatus==="saving"?"#4af0a0":"#4a4e5e",fontFamily:mf}}>{saveStatus==="saving"?"保存中...":""}</div>
             </div>
             <ChevronDown size={14} color="#4a4e5e" style={{flexShrink:0}}/>
           </button>
@@ -217,13 +229,36 @@ export default function MobileApp(){
       {/* ── Project Picker ── */}
       {projPickerOpen&&<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} style={{position:"fixed",inset:0,zIndex:40}}/>}
       {projPickerOpen&&(<div style={{position:"absolute",top:56,left:0,right:0,zIndex:50,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,maxHeight:"60vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.5)",maxWidth:480,margin:"0 auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
+          <Search size={13} color="#7a7e8e"/>
+          <input value={projectQuery} onChange={e=>setProjectQuery(e.target.value)} placeholder="検索..." style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:"#c8ccd8",fontFamily:ff,fontSize:14}}/>
+          {projectQuery&&<button onClick={()=>setProjectQuery("")} style={{...btn,color:"#4a4e5e"}}><XIcon size={12}/></button>}
+        </div>
         <div style={{fontSize:10,fontWeight:500,color:"#7a7e8e",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 4px",marginBottom:6}}>PROJECTS</div>
-        {projects.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"projects",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
-          <span style={{fontSize:16}}>{p.emoji}</span>
+        {visibleFolders.map(f=>(<div key={f.id} style={{marginBottom:8,border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",color:"#7a7e8e"}}>
+            <FolderOpen size={14}/><span style={{flex:1,fontSize:13,color:"#c8ccd8",fontWeight:600}}>{f.title}</span>
+            <button onClick={()=>toggleFolderLock(f.id)} style={{...btn,padding:4,color:f.locked?"#4af0a0":"#3a3a4a"}}>{f.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
+            {!f.locked&&<button onClick={()=>deleteFolder(f.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
+          </div>
+          {f.items.length===0&&<div style={{fontSize:11,color:"#4a4e5e",padding:"0 12px 8px"}}>空</div>}
+          {f.items.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 28px",borderRadius:8,background:activeProj===p.id?"#2a2a35":"transparent",margin:"0 4px 4px",cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"folder",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
+            <FileText size={13} color="#7a7e8e"/>
+            <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
+            <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+              <button onClick={()=>moveProjectToRoot(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><ArrowLeft2 size={12}/></button>
+              <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
+              {!p.locked&&<button onClick={()=>deleteProject(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
+            </div>
+          </div>))}
+        </div>))}
+        {visibleRootProjects.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"projects",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
+          <FileText size={13} color="#7a7e8e"/>
           <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
           <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
-            {projects.length>1&&!p.locked&&<button onClick={()=>deleteProject(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
+            {projectFolders.map(f=><button key={f.id} onClick={()=>moveProjectToFolder(p.id,f.id)} title={f.title} style={{...btn,padding:4,color:"#4a4e5e"}}><ArrowRight size={12}/></button>)}
+            {allProjects.length>1&&!p.locked&&<button onClick={()=>deleteProject(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
           </div>
         </div>))}
         {longPressMenu&&longPressMenu.from==="projects"&&(<div style={{background:"#0a0a0a",border:"1px solid #4a4e5e",borderRadius:10,padding:8,marginBottom:8}}>
@@ -231,10 +266,10 @@ export default function MobileApp(){
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             <button onClick={()=>{reorderArr(projects,setProjects,"projects",longPressMenu.idx,-1);setLongPressMenu(null);}} style={{padding:"6px 10px",borderRadius:6,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:11,fontFamily:ff}}>↑上へ</button>
             <button onClick={()=>{reorderArr(projects,setProjects,"projects",longPressMenu.idx,1);setLongPressMenu(null);}} style={{padding:"6px 10px",borderRadius:6,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:11,fontFamily:ff}}>↓下へ</button>
-            {projects.length>1&&<button onClick={()=>{moveToList(longPressMenu.id);setLongPressMenu(null);}} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(74,240,160,0.3)",background:"rgba(74,240,160,0.08)",color:"#4af0a0",fontSize:11,fontFamily:ff}}>リストに移動</button>}
+            {projectFolders.map(f=><button key={f.id} onClick={()=>{moveProjectToFolder(longPressMenu.id,f.id);setLongPressMenu(null);}} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(74,240,160,0.3)",background:"rgba(74,240,160,0.08)",color:"#4af0a0",fontSize:11,fontFamily:ff}}>{f.title}へ</button>)}
           </div>
         </div>)}
-        {(projectList.length>0)&&(<><div style={{fontSize:10,fontWeight:500,color:"#7a7e8e",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 4px",marginTop:12,marginBottom:6}}>LIST</div>
+        {false&&(projectList.length>0)&&(<><div style={{fontSize:10,fontWeight:500,color:"#7a7e8e",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 4px",marginTop:12,marginBottom:6}}>LIST</div>
         {projectList.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"list",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
           <span style={{fontSize:16}}>{p.emoji}</span>
           <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
@@ -252,10 +287,13 @@ export default function MobileApp(){
           </div>
         </div>)}</>)}
         {showNewProj?(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginTop:8}}>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>{EMOJI_OPTS.map(e=>(<button key={e} onClick={()=>setNewProjEmoji(e)} style={{...btn,width:30,height:30,borderRadius:8,fontSize:14,background:newProjEmoji===e?"#2a2a35":"transparent",border:newProjEmoji===e?"1px solid #4a4e5e":"1px solid transparent"}}>{e}</button>))}</div>
           <input placeholder="プロジェクト名" value={newProjTitle} onChange={e=>setNewProjTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
           <div style={{display:"flex",gap:8}}><button onClick={addProject} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewProj(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
         </div>):(<button onClick={()=>setShowNewProj(true)} style={{...btn,width:"100%",padding:"12px",borderRadius:10,border:"1px dashed #3a3a4a",color:"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:13,marginTop:8}}><Plus size={14}/> 新しいプロジェクト</button>)}
+        {showNewFolder?(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginTop:8}}>
+          <input placeholder="フォルダ名" value={newFolderTitle} onChange={e=>setNewFolderTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
+          <div style={{display:"flex",gap:8}}><button onClick={addFolder} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewFolder(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
+        </div>):(<button onClick={()=>setShowNewFolder(true)} style={{...btn,width:"100%",padding:"12px",borderRadius:10,border:"1px dashed #3a3a4a",color:"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:13,marginTop:8}}><FolderOpen size={14}/> 新しいフォルダ</button>)}
       </div>)}
 
       {/* ── Content ── */}
@@ -423,7 +461,7 @@ export default function MobileApp(){
         <div style={{fontSize:28,marginBottom:12}}>⚠️</div>
         <div style={{fontSize:14,fontWeight:500,color:"#c8ccd8",marginBottom:8}}>本当にリセットしますか？</div>
         <div style={{fontSize:12,color:"#7a7e8e",marginBottom:20,lineHeight:1.5}}>すべてのデータが完全に削除されます。この操作は取り消せません。</div>
-        <div style={{display:"flex",gap:8}}><button onClick={()=>setConfirmReset(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>キャンセル</button><button onClick={async()=>{setConfirmReset(false);for(const t of audioLib)await deleteAudio(S_AP+t.id);for(const t of recLib)await deleteAudio(S_RC+t.id);await deleteData(S_KEY);await clearAllAudio();setProjects([{id:"proj_1",title:"New Project",emoji:"🎵"}]);setLyrics({"proj_1":""});setCards([]);setAudioLib([]);setRecLib([]);setMemo({});setTrash([]);setProjectList([]);setActiveProj("proj_1");if(user){push({projects:[{id:"proj_1",title:"New Project",emoji:"🎵"}],lyrics:{"proj_1":""},cards:[],audioLib:[],recLib:[],memo:{},trash:[],projectList:[],activeProj:"proj_1"});}}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#ef4444",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>リセット</button></div>
+        <div style={{display:"flex",gap:8}}><button onClick={()=>setConfirmReset(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>キャンセル</button><button onClick={async()=>{setConfirmReset(false);for(const t of audioLib)await deleteAudio(S_AP+t.id);for(const t of recLib)await deleteAudio(S_RC+t.id);await deleteData(S_KEY);await clearAllAudio();const resetProjects=[{id:"proj_1",title:"New Project"}];setProjects(resetProjects);setLyrics({"proj_1":""});setCards([]);setAudioLib([]);setRecLib([]);setMemo({});setTrash([]);setProjectList([]);setProjectFolders([]);setActiveProj("proj_1");if(user){push({projects:resetProjects,lyrics:{"proj_1":""},cards:[],audioLib:[],recLib:[],memo:{},trash:[],projectList:[],projectFolders:[],activeProj:"proj_1"});}}} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#ef4444",color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>リセット</button></div>
       </div></div>)}
 
       {/* Tab Bar */}
