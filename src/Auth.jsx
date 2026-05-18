@@ -85,10 +85,13 @@ export function useAuth(onRemoteData, onAudioSync) {
     ignoreNextRemote.current = true;
     setSyncStatus("syncing");
     const result = await pushToCloud(user.id, data);
-    setSyncStatus(result.ok ? "synced" : "error");
+    if (result.conflict && result.remote && onRemoteData) {
+      await onRemoteData(result.remote);
+    }
+    setSyncStatus(result.ok || result.conflict ? "synced" : "error");
     setTimeout(() => setSyncStatus("idle"), 2000);
     return result;
-  }, [user]);
+  }, [user, onRemoteData]);
 
   // Immediate push (no debounce) for destructive ops like trash empty
   const pushNow = useCallback(async (data) => {
@@ -97,10 +100,13 @@ export function useAuth(onRemoteData, onAudioSync) {
     ignoreNextRemote.current = true;
     setSyncStatus("syncing");
     const result = await pushToCloud(user.id, data);
-    setSyncStatus(result.ok ? "synced" : "error");
+    if (result.conflict && result.remote && onRemoteData) {
+      await onRemoteData(result.remote);
+    }
+    setSyncStatus(result.ok || result.conflict ? "synced" : "error");
     setTimeout(() => setSyncStatus("idle"), 2000);
     return result;
-  }, [user]);
+  }, [user, onRemoteData]);
 
   // Audio cloud helpers (exposed for App/Mobile to call on upload/delete)
   const pushAudio = useCallback(async (audioId, base64) => {

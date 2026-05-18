@@ -74,6 +74,7 @@ export default function MobileApp(){
     useCallback(async(userId,aLib,rLib)=>{if(audioSyncRef.current)await audioSyncRef.current(userId,aLib,rLib);},[])
   );
   const[loading,setLoading]=useState(true);
+  const[cloudLoading,setCloudLoading]=useState(false);
   const[projects,setProjects]=useState(DEF_PROJECTS);const[activeProj,setActiveProj]=useState("proj_1");
   const[lyrics,setLyrics]=useState(DEF_LYRICS);const[cards,setCards]=useState([]);
   const[audioLib,setAudioLib]=useState([]);const[recLib,setRecLib]=useState([]);
@@ -111,6 +112,7 @@ export default function MobileApp(){
   const localLastSyncedAtRef=useRef(0);
   const audioCache=useRef({});const mediaRec=useRef(null);const recChunks=useRef([]);
   const audioCtx=useRef(null);const dest=useRef(null);
+  const pulledUserRef=useRef(null);
 
   const btn={background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
 
@@ -129,9 +131,10 @@ export default function MobileApp(){
   /* ── Load ── */
   useEffect(()=>{(async()=>{try{const d=await loadAppData();if(d){localUpdatedAtRef.current=syncTime(d);localLastSyncedAtRef.current=syncedTime(d)||localUpdatedAtRef.current;d.projects&&setProjects(d.projects);d.lyrics&&setLyrics(d.lyrics);d.cards&&setCards(d.cards);d.activeProj&&setActiveProj(d.activeProj);d.audioLib&&setAudioLib(d.audioLib);d.recLib&&setRecLib(d.recLib);d.memo&&setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.projectFolders)setProjectFolders(d.projectFolders);}}catch(e){console.error("Load error:",e);}setLoading(false);})();},[]);
 
-  // Auto-pull from cloud on restart if logged in
-  const hasPulledRef=useRef(false);
-  useEffect(()=>{if(loading||authLoading||!user||hasPulledRef.current)return;hasPulledRef.current=true;setLoading(true);(async()=>{try{const{pullFromCloud}=await import("./sync.js");const result=await pullFromCloud(user.id);if(result.data){const d=result.data;const cloudTime=remoteTime(d,result.updatedAt);const hasUnsyncedLocal=localUpdatedAtRef.current>localLastSyncedAtRef.current;if(hasUnsyncedLocal&&localUpdatedAtRef.current>cloudTime){const pushResult=await pushNow(stateRef.current);if(pushResult?.ok){const synced=markSynced(stateRef.current);localLastSyncedAtRef.current=synced.__lastSyncedAt;stateRef.current=synced;await saveAppData(synced);}return;}localUpdatedAtRef.current=cloudTime||Date.now();localLastSyncedAtRef.current=localUpdatedAtRef.current;if(d.projects)setProjects(d.projects);if(d.lyrics)setLyrics(d.lyrics);if(d.cards)setCards(d.cards);if(d.activeProj)setActiveProj(d.activeProj);if(d.memo)setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.projectFolders)setProjectFolders(d.projectFolders);if(d.audioLib){setAudioLib(d.audioLib);}if(d.recLib){setRecLib(d.recLib);}const{syncAudioOnLogin:sAOL}=await import("./sync.js");await sAOL(user.id,d.audioLib||[],d.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);const synced=markSynced({...stateRef.current,...d,__updatedAt:localUpdatedAtRef.current});stateRef.current=synced;await saveAppData(synced);}else if(localUpdatedAtRef.current>localLastSyncedAtRef.current){const pushResult=await pushNow(stateRef.current);if(pushResult?.ok){const synced=markSynced(stateRef.current);localLastSyncedAtRef.current=synced.__lastSyncedAt;stateRef.current=synced;await saveAppData(synced);}}}catch(e){console.error("Auto-pull error:",e);}finally{setLoading(false);}})();},[user,loading,authLoading,pushNow]);
+  useEffect(()=>{pulledUserRef.current=null;setCloudLoading(!!user);},[user?.id]);
+
+  // Auto-pull from cloud whenever a logged-in account becomes active
+  useEffect(()=>{if(loading||authLoading||!user||pulledUserRef.current===user.id)return;pulledUserRef.current=user.id;setCloudLoading(true);(async()=>{try{const{pullFromCloud}=await import("./sync.js");const result=await pullFromCloud(user.id);if(result.data){const d=result.data;const cloudTime=remoteTime(d,result.updatedAt);const hasUnsyncedLocal=localUpdatedAtRef.current>localLastSyncedAtRef.current;if(hasUnsyncedLocal&&localUpdatedAtRef.current>cloudTime){const pushResult=await pushNow(stateRef.current);if(pushResult?.ok){const synced=markSynced(stateRef.current);localLastSyncedAtRef.current=synced.__lastSyncedAt;stateRef.current=synced;await saveAppData(synced);}return;}localUpdatedAtRef.current=cloudTime||Date.now();localLastSyncedAtRef.current=localUpdatedAtRef.current;if(d.projects)setProjects(d.projects);if(d.lyrics)setLyrics(d.lyrics);if(d.cards)setCards(d.cards);if(d.activeProj)setActiveProj(d.activeProj);if(d.memo)setMemo(d.memo);if(d.trash){const now=Date.now();setTrash(d.trash.filter(t=>now-t.deletedAt<30*24*60*60*1000));}if(d.projectList)setProjectList(d.projectList);if(d.projectFolders)setProjectFolders(d.projectFolders);if(d.audioLib){setAudioLib(d.audioLib);}if(d.recLib){setRecLib(d.recLib);}const{syncAudioOnLogin:sAOL}=await import("./sync.js");await sAOL(user.id,d.audioLib||[],d.recLib||[],loadAudio,saveAudio,S_AP,S_RC,audioCache);const synced=markSynced({...stateRef.current,...d,__updatedAt:localUpdatedAtRef.current});stateRef.current=synced;await saveAppData(synced);}else if(localUpdatedAtRef.current>localLastSyncedAtRef.current){const pushResult=await pushNow(stateRef.current);if(pushResult?.ok){const synced=markSynced(stateRef.current);localLastSyncedAtRef.current=synced.__lastSyncedAt;stateRef.current=synced;await saveAppData(synced);}}}catch(e){console.error("Auto-pull error:",e);}finally{setCloudLoading(false);}})();},[user,loading,authLoading,pushNow]);
 
   /* ── Save ── */
   const doSave=useCallback((o={})=>{if(saveTimer.current)clearTimeout(saveTimer.current);setSaveStatus("saving");saveTimer.current=setTimeout(async()=>{const s=stateRef.current;const d=syncStamp({projects:o.projects||s.projects,lyrics:o.lyrics||s.lyrics,cards:o.cards||s.cards,activeProj:o.activeProj||s.activeProj,audioLib:o.audioLib||s.audioLib,recLib:o.recLib||s.recLib,memo:o.memo||s.memo,trash:o.trash||s.trash,projectList:o.projectList||s.projectList,projectFolders:o.projectFolders||s.projectFolders});d.__lastSyncedAt=localLastSyncedAtRef.current;localUpdatedAtRef.current=d.__updatedAt;await saveAppData(d);if(user){const pushResult=await push(d);if(pushResult?.ok){const synced=markSynced(d);localLastSyncedAtRef.current=synced.__lastSyncedAt;await saveAppData(synced);}}setSaveStatus("saved");setTimeout(()=>setSaveStatus("idle"),1500);},800);},[user,push]);
@@ -207,7 +210,7 @@ export default function MobileApp(){
 
   const hasSrc=!!activeTrackId;
 
-  if(loading||authLoading)return(<div style={{fontFamily:ff,position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0a",color:"#7a7e8e",fontSize:14}}>読み込み中...</div>);
+  if(loading||authLoading||cloudLoading)return(<div style={{fontFamily:ff,position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0a",color:"#7a7e8e",fontSize:14}}>読み込み中...</div>);
   if(!user)return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling}/>;
 
   return(

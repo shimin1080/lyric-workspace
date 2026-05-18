@@ -294,6 +294,7 @@ export default function LyricWorkspace() {
     useCallback(async (userId, aLib, rLib) => { if (audioSyncRef.current) await audioSyncRef.current(userId, aLib, rLib); }, [])
   );
   const [loading, setLoading] = useState(true);
+  const [cloudLoading, setCloudLoading] = useState(false);
   const [projects, setProjects] = useState([{ id: "proj_1", title: "New Project", emoji: "🎵" }]);
   const [activeProj, setActiveProj] = useState("proj_1");
   const [lyrics, setLyrics] = useState({ "proj_1": "" });
@@ -360,6 +361,7 @@ export default function LyricWorkspace() {
   const recordingModeRef = useRef("web");
   const recordingTrackRef = useRef(null);
   const sidebarPointerDragRef = useRef(null);
+  const pulledUserRef = useRef(null);
 
   // Always keep stateRef up to date for async push
   stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
@@ -454,12 +456,16 @@ export default function LyricWorkspace() {
   // Load
   useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
-  // Auto-pull from cloud on restart if logged in
-  const hasPulledRef = useRef(false);
   useEffect(() => {
-    if (loading || authLoading || !user || hasPulledRef.current) return;
-    hasPulledRef.current = true;
-    setLoading(true);
+    pulledUserRef.current = null;
+    setCloudLoading(!!user);
+  }, [user?.id]);
+
+  // Auto-pull from cloud whenever a logged-in account becomes active
+  useEffect(() => {
+    if (loading || authLoading || !user || pulledUserRef.current === user.id) return;
+    pulledUserRef.current = user.id;
+    setCloudLoading(true);
     (async () => {
       try {
         const { pullFromCloud, syncAudioOnLogin: sAOL } = await import("./sync.js");
@@ -504,7 +510,7 @@ export default function LyricWorkspace() {
           }
         }
       } catch (e) { console.error("Auto-pull error:", e); }
-      finally { setLoading(false); }
+      finally { setCloudLoading(false); }
     })();
   }, [user, loading, authLoading, pushNow]);
 
@@ -1192,7 +1198,7 @@ export default function LyricWorkspace() {
   }, [folderFlyout, projectFolders]);
   const onCtx = useCallback((e) => { e.preventDefault(); const s = window.getSelection().toString().trim(); if (s) { setSelText(s); setCtxMenu({ x: e.clientX, y: e.clientY }); } }, []);
 
-  if (loading || authLoading) return (<div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0d", color: "#4a4e5e", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>// loading...</div>);
+  if (loading || authLoading || cloudLoading) return (<div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0d", color: "#4a4e5e", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>// loading...</div>);
   if (!user) return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} />;
 
   return (
