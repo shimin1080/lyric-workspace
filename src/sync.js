@@ -2,22 +2,11 @@ import { supabase } from "./supabase.js";
 
 const BUCKET = "audio";
 const DESKTOP_AUTH_REDIRECT = "lyric-workspace://auth/callback";
-const GOOGLE_DESKTOP_CLIENT_ID = "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.apps.googleusercontent.com";
 const GOOGLE_WEB_DEFAULT_CLIENT_ID = "384809706283-9hfsce08oovfs5csiuem7i99qqna3guq.apps.googleusercontent.com";
-const GOOGLE_NATIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_ID || GOOGLE_DESKTOP_CLIENT_ID;
-const GOOGLE_NATIVE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_SECRET || "";
 const GOOGLE_WEB_CLIENT_ID = GOOGLE_WEB_DEFAULT_CLIENT_ID;
 
-function resolvedNativeClientId() {
-  return GOOGLE_NATIVE_CLIENT_ID === GOOGLE_WEB_DEFAULT_CLIENT_ID ? GOOGLE_DESKTOP_CLIENT_ID : GOOGLE_NATIVE_CLIENT_ID;
-}
-
-function resolvedNativeClientSecret(clientId) {
-  return clientId === GOOGLE_DESKTOP_CLIENT_ID ? "" : GOOGLE_NATIVE_CLIENT_SECRET;
-}
-
 function resolvedWebClientId() {
-  return GOOGLE_WEB_CLIENT_ID === GOOGLE_DESKTOP_CLIENT_ID ? GOOGLE_WEB_DEFAULT_CLIENT_ID : GOOGLE_WEB_CLIENT_ID;
+  return GOOGLE_WEB_CLIENT_ID;
 }
 
 async function isTauriApp() {
@@ -157,12 +146,8 @@ export async function syncAudioOnLogin(userId, audioLib, recLib, localLoadAudio,
 export async function signInWithGoogle() {
   if (!supabase) return { error: "Supabase未設定" };
   const desktop = await isTauriApp();
-  const nativeClientId = resolvedNativeClientId();
-  if (desktop && nativeClientId) {
-    return signInWithNativeGoogle(nativeClientId, resolvedNativeClientSecret(nativeClientId));
-  }
   if (desktop) {
-    return { error: "ネイティブアプリ用のGoogleログイン設定が不足しています。アプリを更新して再度ログインしてください。" };
+    return signInWithDesktopSupabaseGoogle();
   }
   const webClientId = resolvedWebClientId();
   if (!desktop && webClientId) {
@@ -185,6 +170,29 @@ export async function signInWithGoogle() {
   });
   if (error) return { error: error.message };
   return { url: data.url };
+}
+
+async function signInWithDesktopSupabaseGoogle() {
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: DESKTOP_AUTH_REDIRECT,
+        skipBrowserRedirect: true,
+        queryParams: {
+          access_type: "offline",
+          prompt: "select_account",
+        },
+      },
+    });
+    if (error) return { error: error.message };
+    if (!data?.url) return { error: "GoogleログインURLを取得できませんでした" };
+    await openUrl(data.url);
+    return { pending: true };
+  } catch (e) {
+    return { error: e?.message || String(e) || "Googleログインに失敗しました" };
+  }
 }
 
 function loadGoogleIdentityScript() {
@@ -289,32 +297,6 @@ async function signInWithWebGooglePrompt(clientId) {
     return signInWithGoogleIdToken(credential);
   } catch (e) {
     return { error: e?.message || String(e) || "Googleログインに失敗しました" };
-  }
-}
-
-async function signInWithNativeGoogle(clientId, clientSecret) {
-  try {
-    const { invoke } = await import("@tauri-apps/api/core");
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    const start = await invoke("start_google_oauth", {
-      clientId,
-      clientSecret: clientSecret || null,
-    });
-    await openUrl(start.auth_url);
-    const callback = await invoke("finish_google_oauth");
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: "google",
-      token: callback.id_token,
-      access_token: callback.access_token,
-    });
-    if (error) return { error: error.message };
-    return { user: data.user };
-  } catch (e) {
-    const message = e?.message || String(e) || "Googleログインに失敗しました";
-    if (message.includes("client_secret")) {
-      return { error: "Googleログイン設定が不足しています（client_secret）。アプリを更新して再度ログインしてください。" };
-    }
-    return { error: message };
   }
 }
 
