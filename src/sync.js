@@ -189,11 +189,32 @@ export async function signInWithGoogle() {
 
 function loadGoogleIdentityScript() {
   if (window.google?.accounts?.id || window.google?.accounts?.oauth2) return Promise.resolve();
+  const waitForGoogle = (resolve, reject) => {
+    let attempts = 0;
+    const check = () => {
+      if (window.google?.accounts?.id || window.google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
+      attempts += 1;
+      if (attempts > 40) {
+        reject(new Error("Googleログインの読み込みに失敗しました"));
+        return;
+      }
+      setTimeout(check, 50);
+    };
+    check();
+  };
   return new Promise((resolve, reject) => {
     const existing = document.querySelector("script[data-google-identity]");
     if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
+      if (window.google?.accounts?.id || window.google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
+      existing.addEventListener("load", () => waitForGoogle(resolve, reject), { once: true });
       existing.addEventListener("error", () => reject(new Error("Googleログインの読み込みに失敗しました")), { once: true });
+      waitForGoogle(resolve, reject);
       return;
     }
     const script = document.createElement("script");
@@ -201,7 +222,7 @@ function loadGoogleIdentityScript() {
     script.async = true;
     script.defer = true;
     script.dataset.googleIdentity = "true";
-    script.onload = resolve;
+    script.onload = () => waitForGoogle(resolve, reject);
     script.onerror = () => reject(new Error("Googleログインの読み込みに失敗しました"));
     document.head.appendChild(script);
   });
@@ -244,7 +265,8 @@ export async function renderGoogleLoginButton(container, onResult) {
     logo_alignment: "center",
     width: 385,
   });
-  return true;
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  return !!container.querySelector("iframe");
 }
 
 async function signInWithWebGooglePrompt(clientId) {
