@@ -10,6 +10,11 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <script>
+      if (window.location.protocol === 'file:') {
+        window.location.replace('https://lyric-workspace.vercel.app/' + (window.location.hash || '#pc'));
+      }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #404040 transparent; }

@@ -496,9 +496,12 @@ fn wait_for_google_callback(listener: TcpListener) -> Result<GoogleOAuthCallback
     form_urlencoded::parse(query.as_bytes()).into_owned().collect();
 
   let body = if params.contains_key("code") {
-    "<html><body><h1>Google login completed</h1><p>You can return to Lyric Workspace.</p></body></html>"
+    r#"<!doctype html><html><head><meta charset="utf-8"><title>LYRIC WORKSPACE</title><script>
+      location.replace("lyric-workspace://auth/callback?completed=1");
+      window.close();
+    </script></head><body></body></html>"#
   } else {
-    "<html><body><h1>Google login failed</h1><p>Please return to Lyric Workspace and try again.</p></body></html>"
+    r#"<!doctype html><html><head><meta charset="utf-8"><title>LYRIC WORKSPACE</title></head><body></body></html>"#
   };
   let response = format!(
     "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

@@ -166,7 +166,7 @@ export async function signInWithGoogle() {
   }
   const webClientId = resolvedWebClientId();
   if (!desktop && webClientId) {
-    const direct = await signInWithWebGoogle(webClientId);
+    const direct = await signInWithWebGooglePrompt(webClientId);
     if (!direct.error) return direct;
     console.warn("Direct Google login failed:", direct.error);
     return { error: direct.error };
@@ -188,7 +188,7 @@ export async function signInWithGoogle() {
 }
 
 function loadGoogleIdentityScript() {
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
+  if (window.google?.accounts?.id || window.google?.accounts?.oauth2) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const existing = document.querySelector("script[data-google-identity]");
     if (existing) {
@@ -207,28 +207,64 @@ function loadGoogleIdentityScript() {
   });
 }
 
-async function signInWithWebGoogle(clientId) {
+export async function getWebGoogleClientId() {
+  return (await isTauriApp()) ? null : resolvedWebClientId();
+}
+
+export async function signInWithGoogleIdToken(idToken) {
+  if (!supabase) return { error: "Supabase未設定" };
+  if (!idToken) return { error: "id_token required" };
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: "google",
+    token: idToken,
+  });
+  if (error) return { error: error.message };
+  return { user: data.user };
+}
+
+export async function renderGoogleLoginButton(container, onResult) {
+  const clientId = await getWebGoogleClientId();
+  if (!clientId || !container) return false;
+  await loadGoogleIdentityScript();
+  container.innerHTML = "";
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    ux_mode: "popup",
+    callback: async (response) => {
+      const result = await signInWithGoogleIdToken(response?.credential);
+      onResult?.(result);
+    },
+  });
+  window.google.accounts.id.renderButton(container, {
+    type: "standard",
+    theme: "filled_black",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    logo_alignment: "center",
+    width: 385,
+  });
+  return true;
+}
+
+async function signInWithWebGooglePrompt(clientId) {
   try {
     await loadGoogleIdentityScript();
-    const tokenResponse = await new Promise((resolve, reject) => {
-      const client = window.google.accounts.oauth2.initTokenClient({
+    const credential = await new Promise((resolve, reject) => {
+      window.google.accounts.id.initialize({
         client_id: clientId,
-        scope: "openid email profile",
-        prompt: "select_account",
         callback: (response) => {
-          if (response?.error) reject(new Error(response.error_description || response.error));
-          else resolve(response);
+          if (response?.credential) resolve(response.credential);
+          else reject(new Error("Googleログインに失敗しました"));
         },
-        error_callback: (error) => reject(new Error(error?.message || error?.type || "Googleログインに失敗しました")),
       });
-      client.requestAccessToken();
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          reject(new Error("Googleログインボタンからログインしてください"));
+        }
+      });
     });
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: "google",
-      access_token: tokenResponse.access_token,
-    });
-    if (error) return { error: error.message };
-    return { user: data.user };
+    return signInWithGoogleIdToken(credential);
   } catch (e) {
     return { error: e?.message || String(e) || "Googleログインに失敗しました" };
   }

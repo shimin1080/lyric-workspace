@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { signInWithGoogle, signOut, getUser, onAuthChange, pullFromCloud, pushToCloud, subscribeToChanges, uploadAudioToCloud, deleteAudioFromCloud } from "./sync.js";
+import { signInWithGoogle, signOut, getUser, onAuthChange, pullFromCloud, pushToCloud, subscribeToChanges, uploadAudioToCloud, deleteAudioFromCloud, renderGoogleLoginButton } from "./sync.js";
 import { supabase } from "./supabase.js";
 import { createBillingPortalSession, createCheckoutSession, getBillingStatus, openBillingUrl } from "./billing.js";
 
@@ -145,6 +145,8 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billi
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [hasWebGoogleButton, setHasWebGoogleButton] = useState(false);
+  const googleButtonRef = useRef(null);
 
   if (!hasSupabase) {
     return (<div style={{ padding: compact ? 0 : 16 }}><div style={{ fontSize: 13, color: "#c8ccd8", marginBottom: 8, fontWeight: 500 }}>アカウント同期</div><div style={{ fontSize: 12, color: "#7a7e8e", lineHeight: 1.6 }}>Supabaseの設定が必要です。</div></div>);
@@ -195,10 +197,26 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billi
     if (result.error) setError(result.error);
   };
 
+  useEffect(() => {
+    if (!hasSupabase || user || !googleButtonRef.current) return;
+    let cancelled = false;
+    renderGoogleLoginButton(googleButtonRef.current, (result) => {
+      if (cancelled) return;
+      setLoading(false);
+      if (result?.error) setError(result.error);
+    }).then((rendered) => {
+      if (!cancelled) setHasWebGoogleButton(rendered);
+    }).catch(() => {
+      if (!cancelled) setHasWebGoogleButton(false);
+    });
+    return () => { cancelled = true; };
+  }, [hasSupabase, user]);
+
   return (<div style={{ padding: compact ? 0 : 16 }}>
     {!hideLoginTitle && <div style={{ fontSize: 13, color: "#c8ccd8", marginBottom: 16, fontWeight: 500 }}>Googleログインが必要です</div>}
     {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 8 }}>{error}</div>}
-    <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "12px", borderRadius: 2, border: "1px solid #3a3a4a", background: "#c8ccd8", color: "#111116", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: loading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+    <div ref={googleButtonRef} style={{ display: hasWebGoogleButton ? "flex" : "none", width: "100%", justifyContent: "center", minHeight: 44, overflow: "hidden" }} />
+    <button onClick={handleSubmit} disabled={loading} style={{ display: hasWebGoogleButton ? "none" : "flex", width: "100%", padding: "12px", borderRadius: 2, border: "1px solid #3a3a4a", background: "#c8ccd8", color: "#111116", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: loading ? 0.6 : 1, alignItems: "center", justifyContent: "center", gap: 10 }}>
       <span style={{ width: 20, height: 20, borderRadius: 2, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#4285f4", fontSize: 14, fontWeight: 700, fontFamily: "Arial, sans-serif" }}>G</span>
       {loading ? "Googleへ接続中..." : "Googleでログイン"}
     </button>
