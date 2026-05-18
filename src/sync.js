@@ -7,9 +7,10 @@ const GOOGLE_NATIVE_CLIENT_SECRET = import.meta.env.VITE_GOOGLE_NATIVE_CLIENT_SE
 const GOOGLE_WEB_CLIENT_ID = import.meta.env.VITE_GOOGLE_WEB_CLIENT_ID || "384809706283-0nu7ji3j7vflh4m7u7a4majgkm5nfddp.apps.googleusercontent.com";
 
 async function isTauriApp() {
+  if (typeof window !== "undefined" && (window.__TAURI_INTERNALS__ || window.__TAURI__)) return true;
   try {
     const { isTauri } = await import("@tauri-apps/api/core");
-    return isTauri();
+    return typeof isTauri === "function" ? isTauri() : false;
   } catch (e) {
     return false;
   }
@@ -139,18 +140,21 @@ export async function signInWithGoogle() {
   if (desktop && GOOGLE_NATIVE_CLIENT_ID) {
     return signInWithNativeGoogle(GOOGLE_NATIVE_CLIENT_ID, GOOGLE_NATIVE_CLIENT_SECRET);
   }
+  if (desktop) {
+    return { error: "ネイティブアプリ用のGoogleログイン設定が不足しています。アプリを更新して再度ログインしてください。" };
+  }
   if (!desktop && GOOGLE_WEB_CLIENT_ID) {
     const direct = await signInWithWebGoogle(GOOGLE_WEB_CLIENT_ID);
     if (!direct.error) return direct;
-    console.warn("Direct Google login failed, falling back to Supabase OAuth:", direct.error);
+    console.warn("Direct Google login failed:", direct.error);
+    return { error: direct.error };
   }
 
-  const redirectTo = desktop ? DESKTOP_AUTH_REDIRECT : window.location.origin + window.location.pathname;
+  const redirectTo = window.location.origin + window.location.pathname;
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo,
-      skipBrowserRedirect: desktop,
       queryParams: {
         access_type: "offline",
         prompt: "select_account",
@@ -158,14 +162,6 @@ export async function signInWithGoogle() {
     },
   });
   if (error) return { error: error.message };
-  if (desktop && data.url) {
-    try {
-      const { openUrl } = await import("@tauri-apps/plugin-opener");
-      await openUrl(data.url);
-    } catch (e) {
-      return { error: e.message || "ブラウザを開けませんでした" };
-    }
-  }
   return { url: data.url };
 }
 

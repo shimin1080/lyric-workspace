@@ -18,7 +18,19 @@ export function useAuth(onRemoteData, onAudioSync) {
   const ignoreNextRemote = useRef(false);
 
   useEffect(() => {
-    (async () => { const u = await getUser(); setUser(u); setAuthLoading(false); })();
+    (async () => {
+      try {
+        const u = await Promise.race([
+          getUser(),
+          new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+        ]);
+        setUser(u);
+      } catch (e) {
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    })();
     const { data: { subscription } } = onAuthChange((event, session) => { setUser(session?.user || null); });
     return () => subscription.unsubscribe();
   }, []);
@@ -129,7 +141,7 @@ export function SyncBadge({ syncStatus, user }) {
 }
 
 // Login/Register UI
-export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billing, onUpgrade, onManageBilling, onRefreshBilling, compact = false }) {
+export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billing, onUpgrade, onManageBilling, onRefreshBilling, compact = false, hideLoginTitle = false }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -184,8 +196,7 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, billi
   };
 
   return (<div style={{ padding: compact ? 0 : 16 }}>
-    <div style={{ fontSize: 13, color: "#c8ccd8", marginBottom: 4, fontWeight: 500 }}>Googleアカウント</div>
-    <div style={{ fontSize: 11, color: "#7a7e8e", marginBottom: 16 }}>ログインすると、複数端末でデータと音源が同期されます</div>
+    {!hideLoginTitle && <div style={{ fontSize: 13, color: "#c8ccd8", marginBottom: 16, fontWeight: 500 }}>Googleログインが必要です</div>}
     {error && <div style={{ fontSize: 12, color: "#f87171", marginBottom: 8 }}>{error}</div>}
     <button onClick={handleSubmit} disabled={loading} style={{ width: "100%", padding: "12px", borderRadius: 2, border: "1px solid #3a3a4a", background: "#c8ccd8", color: "#111116", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: ff, opacity: loading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
       <span style={{ width: 20, height: 20, borderRadius: 2, background: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#4285f4", fontSize: 14, fontWeight: 700, fontFamily: "Arial, sans-serif" }}>G</span>
@@ -201,9 +212,8 @@ export function AuthGate({ user, onLogin, onLogout, syncStatus, hasSupabase, bil
         <div style={{ padding: "18px 18px 14px", borderBottom: "1px solid #2a2a35" }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: "#4af0a0", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 10 }}>// LYRIC WORKSPACE</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#c8ccd8", marginBottom: 8 }}>Googleログインが必要です</div>
-          <div style={{ fontSize: 12, color: "#7a7e8e", lineHeight: 1.7 }}>同じGoogleアカウントで、PC・モバイル・ネイティブアプリ間のデータと音源を同期します。</div>
         </div>
-        <AuthUI user={user} onLogin={onLogin} onLogout={onLogout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={onUpgrade} onManageBilling={onManageBilling} onRefreshBilling={onRefreshBilling} />
+        <AuthUI user={user} onLogin={onLogin} onLogout={onLogout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={onUpgrade} onManageBilling={onManageBilling} onRefreshBilling={onRefreshBilling} hideLoginTitle />
       </div>
     </div>
   );
