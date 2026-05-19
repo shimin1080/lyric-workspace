@@ -105,6 +105,11 @@ select:focus {
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
+@keyframes lwRightSidebarIn {
+  from { opacity: 0; transform: translate3d(14px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
 @keyframes lwDrawerIn {
   from { opacity: 0; transform: translate3d(-50%, -8px, 0); }
   to { opacity: 1; transform: translate3d(-50%, 0, 0); }
@@ -120,8 +125,46 @@ select:focus {
 }
 
 .lw-motion-sidebar {
+  transition: width 260ms var(--lw-motion), border-color 220ms var(--lw-motion), opacity 220ms var(--lw-motion);
+  will-change: width, opacity;
+}
+
+.lw-motion-sidebar-inner {
   animation: lwSidebarIn 220ms var(--lw-motion) both;
+  transition: transform 260ms var(--lw-motion), opacity 220ms var(--lw-motion);
   will-change: transform, opacity;
+}
+
+.lw-motion-sidebar[data-open="false"] .lw-motion-sidebar-inner {
+  opacity: 0;
+  transform: translate3d(-14px, 0, 0);
+}
+
+.lw-motion-right-sidebar {
+  transition: width 260ms var(--lw-motion), border-color 220ms var(--lw-motion), opacity 220ms var(--lw-motion);
+  will-change: width, opacity;
+}
+
+.lw-motion-right-sidebar-inner {
+  animation: lwRightSidebarIn 220ms var(--lw-motion) both;
+  transition: transform 260ms var(--lw-motion), opacity 220ms var(--lw-motion);
+  will-change: transform, opacity;
+}
+
+.lw-motion-right-sidebar[data-open="false"] .lw-motion-right-sidebar-inner {
+  opacity: 0;
+  transform: translate3d(14px, 0, 0);
+}
+
+.lw-drag-float {
+  transform: translate3d(0, 0, 0) scale(1.02);
+  transition: left 60ms linear, top 60ms linear, transform 160ms var(--lw-motion), opacity 160ms var(--lw-motion);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.lw-drop-caret {
+  animation: lwFadeIn 90ms var(--lw-motion) both;
+  box-shadow: 0 0 0 1px rgba(74, 240, 160, 0.14), 0 0 12px rgba(74, 240, 160, 0.2);
 }
 
 .lw-motion-drawer {

@@ -231,10 +231,22 @@ function LyricEditor({ text, setText, onContextMenu }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [caret, setCaret] = useState({ top: 16, left: 8 });
   const ls = text.split("\n"), sm = buildSecMap(ls), LH = 28;
   let sectionLine = 0;
-  const sync = () => { if (ta.current && gut.current) gut.current.scrollTop = ta.current.scrollTop; };
-  const uc = () => { if (!ta.current) return; setCl(text.substring(0, ta.current.selectionStart).split("\n").length - 1); };
+  const updateCaret = () => {
+    if (!ta.current) return;
+    const el = ta.current;
+    const pos = el.selectionStart;
+    const before = text.substring(0, pos);
+    const lines = before.split("\n");
+    const line = lines.length - 1;
+    const col = lines.at(-1)?.length || 0;
+    setCl(line);
+    setCaret({ top: 16 + line * LH - el.scrollTop, left: 8 + col * 8.45 - el.scrollLeft });
+  };
+  const sync = () => { if (ta.current && gut.current) gut.current.scrollTop = ta.current.scrollTop; updateCaret(); };
+  const uc = () => { updateCaret(); };
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); const d = e.dataTransfer.getData("text/plain"); if (!d || !ta.current) return; const el = ta.current; const pos = el.selectionStart; const before = text.substring(0, pos); const after = text.substring(pos); const ins = (before.length > 0 && !before.endsWith("\n") ? "\n" : "") + d + "\n"; setText(before + ins + after); setTimeout(() => { el.selectionStart = el.selectionEnd = pos + ins.length; el.focus(); }, 0); };
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
@@ -243,8 +255,8 @@ function LyricEditor({ text, setText, onContextMenu }) {
         <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l); if (iS) { sectionLine = 0; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>); } sectionLine += 1; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400 }}>{sectionLine}</div>); })}</div>
       </div>
       <div style={{ flex: 1, position: "relative" }}>
-        {dragOver && <div style={{ position: "absolute", inset: 0, border: "2px dashed #4af0a0", borderRadius: 2, background: "rgba(74,240,160,0.04)", zIndex: 3, pointerEvents: "none", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 12, color: "#4af0a0" }}>ここにドロップして挿入</span></div>}
-        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyUp={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
+        {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: LH - 4, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
   );
@@ -901,7 +913,7 @@ export default function LyricWorkspace() {
   };
   const trackItemDragProps = (track, type) => ({
     draggable: false,
-    onMouseDown: (e) => beginSidebarPointerDrag({ id: track.id, type }, e),
+    onMouseDown: (e) => beginSidebarPointerDrag({ id: track.id, type, label: track.name }, e),
     onMouseUp: (e) => dropOnTrack(track, type, e),
     onDragStart: (e) => {
       setDragTrackId(track.id);
@@ -1212,8 +1224,8 @@ export default function LyricWorkspace() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
         {/* LEFT SIDEBAR */}
-        {sidebarOpen && (
-          <div className="lw-motion-sidebar" style={{ width: 220, flexShrink: 0, borderRight: "1px solid #2a2a35", background: "#111116", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="lw-motion-sidebar" data-open={sidebarOpen ? "true" : "false"} style={{ width: sidebarOpen ? 220 : 0, flexShrink: 0, borderRight: sidebarOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#111116", display: "flex", flexDirection: "column", overflow: "hidden", pointerEvents: sidebarOpen ? "auto" : "none" }}>
+          <div className="lw-motion-sidebar-inner" style={{ width: 220, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: 12, flex: 1, overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 2, background: "#18181f", border: "1px solid #2a2a35", marginBottom: 16 }}><Search size={13} color="#7a7e8e" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="// search..." style={{ background: "transparent", border: "none", outline: "none", fontSize: 12, color: "#c8ccd8", width: "100%", fontFamily: ff }} />{searchQuery && <button onClick={() => setSearchQuery("")} style={{ ...btn, color: "#4a4e5e" }}><XIcon size={11} /></button>}</div>
 
@@ -1326,7 +1338,7 @@ export default function LyricWorkspace() {
 		                  );
 		                })()}
 		                {sidebarDragUi && (
-		                  <div style={{ position: "fixed", left: sidebarDragUi.x + 12, top: sidebarDragUi.y + 10, zIndex: 2000, pointerEvents: "none", minWidth: 130, maxWidth: 190, padding: "6px 9px", borderRadius: 2, background: "rgba(82,82,82,0.18)", color: "#7a7e8e", fontSize: 11, fontFamily: ff, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transform: "translate3d(0,0,0)", transition: "left 0.045s linear, top 0.045s linear" }}>
+		                  <div className="lw-drag-float" style={{ position: "fixed", left: sidebarDragUi.x + 12, top: sidebarDragUi.y + 10, zIndex: 2000, pointerEvents: "none", minWidth: 130, maxWidth: 190, padding: "6px 9px", borderRadius: 2, background: "rgba(82,82,82,0.22)", border: "1px solid rgba(122,126,142,0.18)", color: "#c8ccd8", fontSize: 11, fontFamily: ff, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
 		                    {sidebarDragUi.label}
 		                  </div>
 		                )}
@@ -1353,7 +1365,7 @@ export default function LyricWorkspace() {
               <button onClick={() => setShowSettings(true)} style={{ ...btn, width: "100%", gap: 8, padding: "5px 10px", borderRadius: 2, color: "#7a7e8e", fontFamily: ff, fontSize: 12 }}><Settings size={14} /><span>設定</span></button>
             </div>
           </div>
-        )}
+        </div>
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
@@ -1365,8 +1377,8 @@ export default function LyricWorkspace() {
         </div>
 
         {/* RIGHT SIDEBAR */}
-        {scrapsOpen && (
-          <div style={{ width: 300, flexShrink: 0, borderLeft: "1px solid #2a2a35", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="lw-motion-right-sidebar" data-open={scrapsOpen ? "true" : "false"} style={{ width: scrapsOpen ? 300 : 0, flexShrink: 0, borderLeft: scrapsOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden", pointerEvents: scrapsOpen ? "auto" : "none" }}>
+          <div className="lw-motion-right-sidebar-inner" style={{ width: 300, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* Scrap Notes */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
@@ -1395,7 +1407,7 @@ export default function LyricWorkspace() {
               <div style={{ flex: 1, overflow: "hidden" }}><textarea value={curMemo} onChange={(e) => setCurMemo(e.target.value)} placeholder="自由にメモ..." spellCheck={false} style={{ width: "100%", height: "100%", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "10px 14px", fontSize: 12, lineHeight: 1.7, fontFamily: ff, boxSizing: "border-box" }} /></div>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* AUDIO PLAYER */}
