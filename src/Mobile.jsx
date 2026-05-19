@@ -124,6 +124,7 @@ export default function MobileApp(){
   const projectDragRef=useRef(null);
   const suppressProjectClickRef=useRef(false);
   const projectDragTimerRef=useRef(null);
+  const projPickerCloseTimerRef=useRef(null);
 
   const btn={background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
 
@@ -173,7 +174,7 @@ export default function MobileApp(){
   const syncMobileEditor=(nextText=curText)=>{const el=mobileTextRef.current;if(!el)return;if(mobileGutterRef.current)mobileGutterRef.current.scrollTop=el.scrollTop;const pos=el.selectionStart||0;const before=nextText.substring(0,pos);const parts=before.split("\n");const line=parts.length-1;const lineText=parts.at(-1)||"";setMobileCurrentLine(line);let tw=lineText.length*9.65;try{const cv=document.createElement("canvas");const ctx=cv.getContext("2d");ctx.font="16px 'Noto Sans JP',sans-serif";tw=ctx.measureText(lineText).width;}catch(e){}setMobileCaret({top:16+line*mobileLineHeight-el.scrollTop,left:53+tw-el.scrollLeft,visible:document.activeElement===el});};
 
   useEffect(()=>{if(projPickerOpen)setProjPickerVisible(true);},[projPickerOpen]);
-  const closeProjectPicker=()=>{setProjPickerOpen(false);setLongPressMenu(null);};
+  const closeProjectPicker=()=>{setProjPickerOpen(false);setLongPressMenu(null);if(projPickerCloseTimerRef.current)clearTimeout(projPickerCloseTimerRef.current);projPickerCloseTimerRef.current=setTimeout(()=>setProjPickerVisible(false),350);};
   const switchProject=id=>{setActiveProj(id);setTagFilter("all");closeProjectPicker();doSave({activeProj:id});};
   const addProject=()=>{if(!newProjTitle.trim())return;const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
   const addFolder=()=>{if(!newFolderTitle.trim())return;const nf=[...projectFolders,{id:"folder_"+Date.now(),title:newFolderTitle.trim(),projectIds:[],open:true,locked:false}];setProjectFolders(nf);setShowNewFolder(false);setNewFolderTitle("");doSave({projectFolders:nf});};
@@ -269,7 +270,7 @@ export default function MobileApp(){
       </div>
 
       {/* ── Project Picker ── */}
-      {projPickerVisible&&(<div className="lw-motion-backdrop" data-closing={!projPickerOpen} onAnimationEnd={()=>{if(!projPickerOpen)setProjPickerVisible(false);}} onClick={closeProjectPicker} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
+      {projPickerVisible&&(<div className="lw-motion-backdrop" data-closing={!projPickerOpen} onAnimationEnd={()=>{if(!projPickerOpen){if(projPickerCloseTimerRef.current)clearTimeout(projPickerCloseTimerRef.current);setProjPickerVisible(false);}}} onClick={closeProjectPicker} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)"}}/>
       <div className="lw-motion-drawer" data-closing={!projPickerOpen} onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
