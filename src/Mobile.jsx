@@ -237,8 +237,9 @@ export default function MobileApp(){
       </div>
 
       {/* ── Project Picker ── */}
-      {projPickerOpen&&<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} style={{position:"fixed",inset:0,zIndex:40}}/>}
-      {projPickerOpen&&(<div style={{position:"absolute",top:56,left:0,right:0,zIndex:50,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,maxHeight:"60vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.5)",maxWidth:480,margin:"0 auto"}}>
+      {projPickerOpen&&(<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
+      <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)"}}/>
+      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,maxHeight:"60vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
           <Search size={13} color="#7a7e8e"/>
           <input value={projectQuery} onChange={e=>setProjectQuery(e.target.value)} placeholder="検索..." style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:"#c8ccd8",fontFamily:ff,fontSize:14}}/>
@@ -304,7 +305,7 @@ export default function MobileApp(){
           <input placeholder="フォルダ名" value={newFolderTitle} onChange={e=>setNewFolderTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
           <div style={{display:"flex",gap:8}}><button onClick={addFolder} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewFolder(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
         </div>):(<button onClick={()=>setShowNewFolder(true)} style={{...btn,width:"100%",padding:"12px",borderRadius:10,border:"1px dashed #3a3a4a",color:"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:13,marginTop:8}}><FolderOpen size={14}/> 新しいフォルダ</button>)}
-      </div>)}
+      </div></div>)}
 
       {/* ── Content ── */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
