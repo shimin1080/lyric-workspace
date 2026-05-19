@@ -12,7 +12,6 @@ const ChevronRight=(p)=><I {...p} d="M9 18l6-6-6-6"/>;
 const ChevronDown=(p)=><I {...p} d="M6 9l6 6 6-6"/>;
 const Plus=(p)=><I {...p} d={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}/>;
 const Search=(p)=><I {...p} d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
-const GripVertical=(p)=><I {...p} d={<><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></>}/>;
 const Settings=(p)=><I {...p} d={<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></>}/>;
 const MusicIcon=(p)=><I {...p} d={<><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>}/>;
 const FolderOpen=(p)=><I {...p} d={<><path d="M2 19a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-7l-2-2H4a2 2 0 00-2 2z"/></>}/>;
@@ -918,7 +917,7 @@ export default function LyricWorkspace() {
   const stopActionDrag = (e) => e.stopPropagation();
   const dragTarget = sidebarDragUi?.target || {};
   const rowMotion = { transition: "transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease, opacity 0.12s ease" };
-  const sidebarDragHandleStyle = { display: "grid", placeItems: "center", width: 18, height: 22, marginLeft: -5, color: "#4a4e5e", cursor: "grab", touchAction: "none", flexShrink: 0 };
+  const sidebarDragHandleStyle = { display: "grid", placeItems: "center", width: 16, height: 22, color: "#7a7e8e", cursor: "grab", touchAction: "none", flexShrink: 0 };
   const dropLine = () => null;
   const dropOutline = {};
   const openFolderFlyout = (f, e) => {
@@ -1262,9 +1261,8 @@ export default function LyricWorkspace() {
 	                          onClick={(e) => openFolderFlyout(f, e)}
 	                          style={{ ...btn, width: "100%", gap: 7, padding: "5px 10px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, color: "#7a7e8e", background: "transparent", cursor: "pointer", ...rowMotion }}
                         >
-                          <span {...folderItemDragProps(f)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === f.id ? "grabbing" : "grab" }}><GripVertical size={12} /></span>
                           <ChevronRight size={11} />
-                          <FolderOpen size={12} />
+                          <span {...folderItemDragProps(f)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === f.id ? "grabbing" : "grab" }}><FolderOpen size={12} /></span>
                           <EditableName name={f.title} onSave={(n) => renameFolder(f.id, n)} style={{ fontSize: 12, flex: 1 }} />
                         </button>
                         <div style={{ position: "absolute", right: 4, display: "flex", gap: 1, alignItems: "center" }}>
@@ -1290,7 +1288,7 @@ export default function LyricWorkspace() {
                       onDragEnd={() => setDragProjId(null)}
 	                      style={{ display: "flex", alignItems: "center", marginBottom: 2, position: "relative", opacity: dragProjId === p.id ? 0.32 : 1, borderRadius: 2, ...rowMotion }}
                     >
-	                      <button onClick={() => switchProject(p.id)} style={{ ...btn, width: "100%", gap: 8, padding: "5px 10px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><GripVertical size={12} /></span><FileText size={12} /><EditableName name={p.title} onSave={(n) => renameProject(p.id, n)} style={{ fontSize: 12, flex: 1 }} /></button>
+	                      <button onClick={() => switchProject(p.id)} style={{ ...btn, width: "100%", gap: 8, padding: "5px 10px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><EditableName name={p.title} onSave={(n) => renameProject(p.id, n)} style={{ fontSize: 12, flex: 1 }} /></button>
                       <div style={{ position: "absolute", right: 4, display: "flex", gap: 1, alignItems: "center" }}><button data-no-drag="true" onMouseDown={stopActionDrag} onClick={() => toggleLock(p.id)} style={{ ...btn, padding: 3, borderRadius: 2, color: p.locked ? "#4af0a0" : "#3a3a4a" }}>{p.locked ? <Lock size={9} /> : <Unlock size={9} />}</button>{allProjects.length > 1 && !p.locked && (<button data-no-drag="true" onMouseDown={stopActionDrag} onClick={() => deleteProject(p.id)} style={{ ...btn, padding: 3, borderRadius: 2, color: "#4a4e5e", opacity: 0.4 }}><XIcon size={10} /></button>)}</div>
 	                    </div>
                     </Fragment>
@@ -1328,7 +1326,7 @@ export default function LyricWorkspace() {
                                 onDragEnd={() => setDragProjId(null)}
                                 style={{ display: "flex", alignItems: "center", marginBottom: 2, position: "relative", opacity: dragProjId === p.id ? 0.32 : 1, borderRadius: 2, ...rowMotion }}
                               >
-		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><GripVertical size={12} /></span><FileText size={12} /><span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span></button>
+		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span></button>
                               </div>
                             </Fragment>
 		                      ))}

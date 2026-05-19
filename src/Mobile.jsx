@@ -36,7 +36,6 @@ const ChevronLeft=(p)=><I {...p} d="M15 18l-6-6 6-6"/>;
 const ChevronRight=(p)=><I {...p} d="M9 18l6-6-6-6"/>;
 const FolderOpen=(p)=><I {...p} d={<><path d="M2 19a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-7l-2-2H4a2 2 0 00-2 2z"/></>}/>;
 const Search=(p)=><I {...p} d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
-const GripVertical=(p)=><I {...p} d={<><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></>}/>;
 const Disc=(p)=><I {...p} d={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>}/>;
 const CheckIcon=(p)=><I {...p} d={<><polyline points="20 6 9 17 4 12"/></>}/>;
 const Loader=({size=14,color="#4af0a0"})=>(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" style={{flexShrink:0,animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>);
@@ -190,7 +189,7 @@ export default function MobileApp(){
   const cancelProjectDrag=()=>{clearProjectDragTimer();projectPointerRef.current=null;setProjectDrag(null);setTimeout(()=>{suppressProjectClickRef.current=false;},120);try{document.body.style.overflow="";}catch(err){}};
   const dragRowStyle=(id)=>projectDrag?.id===id?{opacity:.45,outline:"1px solid #4a4e5e"}:{};
   const projectDragBaseStyle={WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none"};
-  const projectDragHandleStyle={display:"grid",placeItems:"center",width:24,height:28,marginLeft:-4,color:"#4a4e5e",cursor:"grab",touchAction:"none",WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none",flexShrink:0};
+  const projectDragHandleStyle={display:"grid",placeItems:"center",width:22,height:28,color:"#7a7e8e",cursor:"grab",touchAction:"none",WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none",flexShrink:0};
 
   /* ── Scrap ── */
   const saveToScrap=()=>{if(!selText.trim())return;const sec=findSection(curText,selText);const nc=[{id:Date.now(),text:selText,tags:[sec],time:ts(),projId:activeProj},...cards];setCards(nc);setShowSelBar(false);setSelText("");doSave({cards:nc});setTab("scraps");};
@@ -289,8 +288,7 @@ export default function MobileApp(){
           </div>
           {f.open!==false&&f.items.length===0&&<div style={{fontSize:11,color:"#4a4e5e",padding:"0 12px 8px"}}>空</div>}
           {f.open!==false&&f.items.map((p,idx)=>(<div key={p.id} data-mobile-project-id={p.id} data-mobile-folder-id={f.id} onContextMenu={e=>e.preventDefault()} onClick={()=>{if(suppressProjectClickRef.current||editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 28px",borderRadius:8,background:activeProj===p.id?"#2a2a35":"transparent",margin:"0 4px 4px",...projectDragBaseStyle,...dragRowStyle(p.id)}}>
-            <span onPointerDown={e=>startProjectDrag(e,p.id,true)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={e=>e.stopPropagation()} style={{...projectDragHandleStyle,cursor:projectDrag?.id===p.id?"grabbing":"grab"}}><GripVertical size={14}/></span>
-            <FileText size={13} color="#7a7e8e"/>
+            <span onPointerDown={e=>startProjectDrag(e,p.id,true)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={e=>e.stopPropagation()} style={{...projectDragHandleStyle,cursor:projectDrag?.id===p.id?"grabbing":"grab"}}><FileText size={13} color="#7a7e8e"/></span>
             <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
             <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
               <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
@@ -299,8 +297,7 @@ export default function MobileApp(){
           </div>))}
         </div>))}
         {visibleRootProjects.map((p,idx)=>(<div key={p.id} data-mobile-project-id={p.id} data-mobile-folder-id="" onContextMenu={e=>e.preventDefault()} onClick={()=>{if(suppressProjectClickRef.current||editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,...projectDragBaseStyle,...dragRowStyle(p.id)}}>
-          <span onPointerDown={e=>startProjectDrag(e,p.id,true)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={e=>e.stopPropagation()} style={{...projectDragHandleStyle,cursor:projectDrag?.id===p.id?"grabbing":"grab"}}><GripVertical size={14}/></span>
-          <FileText size={13} color="#7a7e8e"/>
+          <span onPointerDown={e=>startProjectDrag(e,p.id,true)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={e=>e.stopPropagation()} style={{...projectDragHandleStyle,cursor:projectDrag?.id===p.id?"grabbing":"grab"}}><FileText size={13} color="#7a7e8e"/></span>
           <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
           <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
