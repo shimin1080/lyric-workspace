@@ -21,7 +21,7 @@
       *::-webkit-scrollbar { width: 5px; }
       *::-webkit-scrollbar-track { background: transparent; }
       *::-webkit-scrollbar-thumb { background: #404040; border-radius: 999px; }
-      textarea::selection { background: rgba(245,158,11,0.25); color: #fef3c7; }
+      textarea::selection { background: rgba(74,240,160,0.28); color: #c8ccd8; }
       body { background: #0a0a0a; overflow: hidden; }
       @keyframes ctxFade { from { opacity: 0; transform: scale(.96) translateY(-3px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       @keyframes spin { to { transform: rotate(360deg); } }
@@ -34,8 +34,24 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js?v=20260518-login').then((registration) => {
+          let refreshing = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+          });
+          navigator.serviceWorker.register('/sw.js?v=20260519-ui2').then((registration) => {
             registration.update().catch(() => {});
+            if (registration.waiting) registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+            registration.addEventListener('updatefound', () => {
+              const worker = registration.installing;
+              if (!worker) return;
+              worker.addEventListener('statechange', () => {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                  worker.postMessage({ type: 'SKIP_WAITING' });
+                }
+              });
+            });
           }).catch(() => {});
         });
       }

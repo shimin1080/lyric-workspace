@@ -1,4 +1,4 @@
-const CACHE_NAME = "lyric-workspace-v2-login";
+const CACHE_NAME = "lyric-workspace-v3-ui-20260519";
 const STATIC_ASSETS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
@@ -17,9 +17,15 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
   if (event.request.mode === "navigate") {
-    event.respondWith(fetch(event.request).catch(() => caches.match("/index.html")));
+    event.respondWith(
+      fetch(event.request, { cache: "no-store" }).catch(() => caches.match("/index.html"))
+    );
     return;
   }
 
