@@ -1,0 +1,17 @@
+src-tauri/target
+src-tauri/target/**
+src-tauri/target/**/*
+node_modules
+node_modules/**
+node_modules/**/*
+dist
+dist/**
+dist/**/*
+.git
+.git/**
+.git/**/*
+.tauri
+.tauri/**
+.tauri/**/*
+.env
+.DS_Store
