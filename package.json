@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "desktop:manifest": "node scripts/create-updater-manifest.mjs"
+    "desktop:manifest": "node scripts/create-updater-manifest.mjs",
+    "desktop:release": "node scripts/publish-github-release.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
