@@ -35,6 +35,7 @@ const ChevronDown=(p)=><I {...p} d="M6 9l6 6 6-6"/>;
 const ChevronLeft=(p)=><I {...p} d="M15 18l-6-6 6-6"/>;
 const ChevronRight=(p)=><I {...p} d="M9 18l6-6-6-6"/>;
 const FolderOpen=(p)=><I {...p} d={<><path d="M2 19a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-7l-2-2H4a2 2 0 00-2 2z"/></>}/>;
+const Search=(p)=><I {...p} d={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
 const Disc=(p)=><I {...p} d={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>}/>;
 const CheckIcon=(p)=><I {...p} d={<><polyline points="20 6 9 17 4 12"/></>}/>;
 const Loader=({size=14,color="#4af0a0"})=>(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" style={{flexShrink:0,animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>);
