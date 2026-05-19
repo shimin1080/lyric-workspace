@@ -22,6 +22,13 @@ self.addEventListener("message", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  // Supabase API / Storage / Realtime はキャッシュしない（認証情報を含むため）
+  const url = new URL(event.request.url);
+  if (url.hostname.includes("supabase.co")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   if (event.request.mode === "navigate") {
     event.respondWith(
       fetch(event.request, { cache: "no-store" }).catch(() => caches.match("/index.html"))

@@ -147,7 +147,7 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, compa
     setError(""); setLoading(true);
     const result = await onLogin();
     setLoading(false);
-    if (result.error) setError(result.error);
+    if (result.error) setError("ログインに失敗しました。もう一度お試しください");
   };
 
   useEffect(() => {
@@ -156,7 +156,7 @@ export function AuthUI({ user, onLogin, onLogout, syncStatus, hasSupabase, compa
     renderGoogleLoginButton(googleButtonRef.current, (result) => {
       if (cancelled) return;
       setLoading(false);
-      if (result?.error) setError(result.error);
+      if (result?.error) setError("ログインに失敗しました。もう一度お試しください");
     }).then((rendered) => {
       if (!cancelled) setHasWebGoogleButton(rendered);
     }).catch(() => {
