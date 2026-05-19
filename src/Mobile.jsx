@@ -118,6 +118,7 @@ export default function MobileApp(){
   const projectPointerRef=useRef(null);
   const projectDragRef=useRef(null);
   const suppressProjectClickRef=useRef(false);
+  const projectDragTimerRef=useRef(null);
 
   const btn={background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
 
@@ -180,12 +181,13 @@ export default function MobileApp(){
   const swipeNav=(dir)=>{const idx=allProjs.findIndex(p=>p.id===activeProj);const ni=idx+dir;if(ni>=0&&ni<allProjs.length){switchProject(allProjs[ni].id);}};
   const findProjectDropTarget=(x,y)=>{const el=document.elementFromPoint(x,y);if(!el)return null;const row=el.closest?.("[data-mobile-project-id]");if(row){const rect=row.getBoundingClientRect();return{folderId:row.dataset.mobileFolderId||null,targetId:row.dataset.mobileProjectId,position:y<rect.top+rect.height/2?"before":"after"};}const folder=el.closest?.("[data-mobile-folder-id]");if(folder)return{folderId:folder.dataset.mobileFolderId,intoFolder:true};const list=el.closest?.("[data-mobile-project-list]");if(list)return{folderId:null,targetId:null,position:"after"};return null;};
   const applyProjectDrop=(projectId,target)=>{if(!target||target.targetId===projectId)return;const proj=allProjects.find(p=>p.id===projectId);if(!proj)return;let nf=projectFolders.map(f=>({...f,projectIds:(f.projectIds||[]).filter(id=>id!==projectId)}));let np=[...projects];if(target.folderId){nf=nf.map(f=>{if(f.id!==target.folderId)return f;const ids=[...(f.projectIds||[]).filter(id=>id!==projectId)];let idx=target.targetId?ids.indexOf(target.targetId):-1;if(idx<0)idx=ids.length;else if(target.position==="after")idx+=1;ids.splice(idx,0,projectId);return{...f,projectIds:ids,open:true};});}else{if(!np.some(p=>p.id===projectId))np=[...np,proj];np=np.filter(p=>p.id!==projectId);let idx=target.targetId?np.findIndex(p=>p.id===target.targetId):-1;if(idx<0)idx=np.length;else if(target.position==="after")idx+=1;np.splice(idx,0,proj);}setProjects(np);setProjectFolders(nf);doSave({projects:np,projectFolders:nf});};
-  const startProjectDrag=(e,id)=>{if(editingName===id)return;projectPointerRef.current={id,x:e.clientX,y:e.clientY,dragging:false};try{e.currentTarget.setPointerCapture?.(e.pointerId);}catch(err){}};
-  const moveProjectDrag=e=>{const s=projectPointerRef.current;if(!s)return;const moved=Math.abs(e.clientX-s.x)+Math.abs(e.clientY-s.y);if(!s.dragging&&moved>10){s.dragging=true;suppressProjectClickRef.current=true;setLongPressMenu(null);}if(!s.dragging)return;e.preventDefault();const target=findProjectDropTarget(e.clientX,e.clientY);setProjectDrag({id:s.id,target});};
-  const endProjectDrag=e=>{const s=projectPointerRef.current;if(!s)return;if(s.dragging){e.preventDefault();applyProjectDrop(s.id,projectDragRef.current?.target);setTimeout(()=>{suppressProjectClickRef.current=false;},120);}projectPointerRef.current=null;setProjectDrag(null);};
-  const cancelProjectDrag=()=>{projectPointerRef.current=null;setProjectDrag(null);setTimeout(()=>{suppressProjectClickRef.current=false;},120);};
+  const clearProjectDragTimer=()=>{if(projectDragTimerRef.current){clearTimeout(projectDragTimerRef.current);projectDragTimerRef.current=null;}};
+  const startProjectDrag=(e,id)=>{if(editingName===id)return;clearProjectDragTimer();projectPointerRef.current={id,x:e.clientX,y:e.clientY,lastX:e.clientX,lastY:e.clientY,dragging:false,cancelled:false};projectDragTimerRef.current=setTimeout(()=>{const s=projectPointerRef.current;if(!s||s.cancelled)return;s.dragging=true;suppressProjectClickRef.current=true;setLongPressMenu(null);setProjectDrag({id:s.id,target:findProjectDropTarget(s.lastX,s.lastY)});try{document.body.style.overflow="hidden";}catch(err){}},520);};
+  const moveProjectDrag=e=>{const s=projectPointerRef.current;if(!s)return;s.lastX=e.clientX;s.lastY=e.clientY;const dx=Math.abs(e.clientX-s.x),dy=Math.abs(e.clientY-s.y);if(!s.dragging){if(dy>10||dx>18){s.cancelled=true;clearProjectDragTimer();}return;}e.preventDefault();const target=findProjectDropTarget(e.clientX,e.clientY);setProjectDrag({id:s.id,target});};
+  const endProjectDrag=e=>{clearProjectDragTimer();const s=projectPointerRef.current;if(!s)return;if(s.dragging){e.preventDefault();applyProjectDrop(s.id,projectDragRef.current?.target);setTimeout(()=>{suppressProjectClickRef.current=false;},120);}projectPointerRef.current=null;setProjectDrag(null);try{document.body.style.overflow="";}catch(err){}};
+  const cancelProjectDrag=()=>{clearProjectDragTimer();projectPointerRef.current=null;setProjectDrag(null);setTimeout(()=>{suppressProjectClickRef.current=false;},120);try{document.body.style.overflow="";}catch(err){}};
   const dragRowStyle=(id)=>projectDrag?.id===id?{opacity:.45,outline:"1px solid #4a4e5e"}:{};
-  const projectDragBaseStyle={WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none",touchAction:"none"};
+  const projectDragBaseStyle={WebkitUserSelect:"none",userSelect:"none",WebkitTouchCallout:"none",touchAction:"pan-y"};
 
   /* ── Scrap ── */
   const saveToScrap=()=>{if(!selText.trim())return;const sec=findSection(curText,selText);const nc=[{id:Date.now(),text:selText,tags:[sec],time:ts(),projId:activeProj},...cards];setCards(nc);setShowSelBar(false);setSelText("");doSave({cards:nc});setTab("scraps");};
