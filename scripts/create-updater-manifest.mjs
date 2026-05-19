@@ -9,13 +9,14 @@ const version = tag.replace(/^v/, "");
 const bundleDir = path.join(root, "src-tauri", "target", "release", "bundle", "macos");
 const files = await fs.readdir(bundleDir);
 const archiveName = files.find((file) => file.endsWith(".app.tar.gz"));
+const releaseAssetName = archiveName?.replaceAll(" ", ".");
 
 if (!archiveName) {
   throw new Error(`Updater archive was not found in ${bundleDir}`);
 }
 
 const signature = (await fs.readFile(path.join(bundleDir, `${archiveName}.sig`), "utf8")).trim();
-const url = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(archiveName)}`;
+const url = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(releaseAssetName)}`;
 const manifest = {
   version,
   notes: process.env.RELEASE_NOTES || "LYRIC WORKSPACE update",

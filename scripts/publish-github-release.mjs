@@ -67,7 +67,7 @@ const uploadBase = release.upload_url.replace(/\{.*$/, "");
 
 for (const relPath of files) {
   const file = path.join(root, relPath);
-  const name = path.basename(file);
+  const name = path.basename(file).replaceAll(" ", ".");
   const existing = (release.assets || []).find((asset) => asset.name === name);
   if (existing) await github(existing.url, { method: "DELETE" });
   const bytes = await fs.readFile(file);
