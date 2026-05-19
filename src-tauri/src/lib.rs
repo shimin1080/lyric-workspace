@@ -680,9 +680,13 @@ pub fn run() {
       start_supabase_oauth_callback,
       finish_supabase_oauth_callback
     ])
+    .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_opener::init())
     .plugin(tauri_plugin_deep_link::init())
     .setup(|app| {
+      #[cfg(desktop)]
+      app.handle()
+        .plugin(tauri_plugin_updater::Builder::new().build())?;
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

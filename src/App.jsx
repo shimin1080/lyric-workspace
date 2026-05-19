@@ -4,6 +4,7 @@ import { useAuth, AuthUI, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
 import { getNativeRecordingStatus, isNativeRecordingAvailable, listNativeInputDevices, startNativeRecording, stopNativeRecording } from "./nativeRecording.js";
 import { FREE_LIMITS } from "./billing.js";
+import { NativeUpdaterPanel, NativeUpdaterToast } from "./updater.jsx";
 
 /* ── Icons ─────────────────────────────────── */
 const I=({d,size=16,color="currentColor",style={}})=>(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,...style}}>{typeof d==="string"?<path d={d}/>:d}</svg>);
@@ -1463,6 +1464,7 @@ export default function LyricWorkspace() {
       {showSettings && (<div onClick={() => setShowSettings(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 440, maxHeight: "80vh", margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35", flexShrink: 0 }}><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>設定</span><button onClick={() => setShowSettings(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div><div style={{ padding: 18, overflowY: "auto" }}>
         {limitMessage && <div style={{ background: "rgba(74,240,160,0.08)", border: "1px solid rgba(74,240,160,0.22)", borderRadius: 2, padding: 12, marginBottom: 12, color: "#4af0a0", fontSize: 12, lineHeight: 1.5 }}>{limitMessage}</div>}
         <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} />
+        <NativeUpdaterPanel />
         <div style={{ borderTop: "1px solid #2a2a35", paddingTop: 16, marginTop: 16 }}><div style={{ fontSize: 12, color: "#c8ccd8", marginBottom: 4 }}>データ管理</div><div style={{ fontSize: 11, color: "#7a7e8e", marginBottom: 12 }}>すべてのデータを初期状態にリセット（取消不可）</div><button onClick={() => setConfirmReset(true)} style={{ padding: "7px 14px", borderRadius: 2, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: 11, cursor: "pointer", fontFamily: ff }}>リセット</button><div style={{ borderTop: "1px solid #2a2a35", paddingTop: 14, marginTop: 14 }}><div style={{ fontSize: 11, color: "#7a7e8e" }}>プロジェクト: {projects.length} / スクラップ: {cards.length} / 音楽: {audioLib.length} / 録音: {recLib.length}</div></div></div>
       </div></div></div>)}
 
@@ -1495,6 +1497,7 @@ export default function LyricWorkspace() {
         </div>
         {trash.length > 0 && <div style={{ padding: "10px 14px", borderTop: "1px solid #2a2a35", flexShrink: 0 }}><button onClick={emptyTrash} style={{ width: "100%", padding: "8px", borderRadius: 2, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: 11, cursor: "pointer", fontFamily: ff }}>ゴミ箱を空にする</button></div>}
       </div></div>)}
+      <NativeUpdaterToast />
     </div>
   );
 }

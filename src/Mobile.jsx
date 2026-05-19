@@ -3,6 +3,7 @@ import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, lo
 import { useAuth, AuthUI, SyncBadge, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
 import { FREE_LIMITS } from "./billing.js";
+import { NativeUpdaterPanel, NativeUpdaterToast } from "./updater.jsx";
 
 /* ── Icons ─────────────────────────────────── */
 const I=({d,size=16,color="currentColor",style={}})=>(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,...style}}>{typeof d==="string"?<path d={d}/>:d}</svg>);
@@ -423,6 +424,9 @@ export default function MobileApp(){
           <div style={{background:"#111116",borderRadius:12,border:"1px solid #2a2a35",padding:16,marginBottom:16}}>
             <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} compact />
           </div>
+          <div style={{background:"#111116",borderRadius:12,border:"1px solid #2a2a35",padding:16,marginBottom:16}}>
+            <NativeUpdaterPanel compact />
+          </div>
           {/* Trash */}
           <div style={{background:"#111116",borderRadius:12,border:"1px solid #2a2a35",padding:16,marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -513,6 +517,7 @@ export default function MobileApp(){
           <span style={{fontSize:9,color:tab===t.id?"#4af0a0":"#4a4e5e",fontFamily:ff}}>{t.label}</span>
         </button>))}
       </div>
+      <NativeUpdaterToast mobile />
     </div>
   );
 }

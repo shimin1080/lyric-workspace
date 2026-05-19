@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "LYRIC WORKSPACE",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "identifier": "com.shimin1080.lyric-workspace",
   "build": {
     "frontendDist": "../dist",
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
       "app",
       "dmg"
@@ -53,6 +54,12 @@
           "lyric-workspace"
         ]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2OUY2NTJGMjZCRDA4MjUKUldRbENMMG1MMldmTnIzMllzeUQ4cGFlSDZ5UDVVbW1PM2l6YytSWlZvUHl2UGtpN005cGU2SU8K",
+      "endpoints": [
+        "https://github.com/shimin1080/lyric-workspace/releases/latest/download/latest.json"
+      ]
     }
   }
 }
