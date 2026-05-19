@@ -1,4 +1,5 @@
 import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, loadAudio, deleteAudio, clearAllAudio } from "./storage.js";
 import { useAuth, AuthUI, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
@@ -1324,7 +1325,7 @@ export default function LyricWorkspace() {
 		                  const f = projectFolders.find((x) => x.id === folderFlyout.id);
 		                  if (!f) return null;
 		                  const items = (f.projectIds || []).map((id) => allProjects.find((p) => p.id === id)).filter(Boolean);
-		                  return (
+		                  return createPortal((
 		                    <div
                           data-folder-flyout="true"
                           data-folder-id={f.id}
@@ -1357,7 +1358,7 @@ export default function LyricWorkspace() {
                             </Fragment>
 		                      ))}
 		                    </div>
-		                  );
+		                  ), document.body);
 		                })()}
 		                {sidebarDragUi && (
 		                  <div className="lw-drag-float" style={{ position: "fixed", left: sidebarDragUi.x + 12, top: sidebarDragUi.y + 10, zIndex: 2000, pointerEvents: "none", minWidth: 130, maxWidth: 190, padding: "6px 9px", borderRadius: 2, background: "rgba(82,82,82,0.22)", border: "1px solid rgba(122,126,142,0.18)", color: "#c8ccd8", fontSize: 11, fontFamily: ff, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

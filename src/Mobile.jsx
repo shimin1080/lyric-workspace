@@ -106,6 +106,7 @@ export default function MobileApp(){
   const[projPickerOpen,setProjPickerOpen]=useState(false);
   const[projPickerVisible,setProjPickerVisible]=useState(false);
   const[mobileCurrentLine,setMobileCurrentLine]=useState(0);
+  const[mobileCaret,setMobileCaret]=useState({top:16,left:53,visible:false});
   const[editingName,setEditingName]=useState(null);const[editNameVal,setEditNameVal]=useState("");
   const[longPressMenu,setLongPressMenu]=useState(null);
   const[projectDrag,setProjectDrag]=useState(null);
@@ -169,7 +170,7 @@ export default function MobileApp(){
   let mobileSectionLine=0;
 
   useEffect(()=>{projectDragRef.current=projectDrag;},[projectDrag]);
-  const syncMobileEditor=()=>{const el=mobileTextRef.current;if(!el)return;if(mobileGutterRef.current)mobileGutterRef.current.scrollTop=el.scrollTop;const pos=el.selectionStart||0;setMobileCurrentLine(curText.substring(0,pos).split("\n").length-1);};
+  const syncMobileEditor=(nextText=curText)=>{const el=mobileTextRef.current;if(!el)return;if(mobileGutterRef.current)mobileGutterRef.current.scrollTop=el.scrollTop;const pos=el.selectionStart||0;const before=nextText.substring(0,pos);const parts=before.split("\n");const line=parts.length-1;const col=parts.at(-1)?.length||0;setMobileCurrentLine(line);setMobileCaret({top:16+line*mobileLineHeight-el.scrollTop,left:53+col*9.65-el.scrollLeft,visible:document.activeElement===el});};
 
   useEffect(()=>{if(projPickerOpen)setProjPickerVisible(true);},[projPickerOpen]);
   const closeProjectPicker=()=>{setProjPickerOpen(false);setLongPressMenu(null);};
@@ -354,7 +355,8 @@ export default function MobileApp(){
               <div style={{width:3,flexShrink:0}}>{mobileLines.map((l,i)=>(<div key={i} style={{height:mobileLineHeight,background:mobileSecMap[i]||"transparent",opacity:getSecLabel(l)?1:0.4}}/>))}</div>
               <div style={{width:42}}>{mobileLines.map((l,i)=>{const label=getSecLabel(l),isSection=!!label,isActive=i===mobileCurrentLine,sc=getSecColor(l);if(isSection){mobileSectionLine=0;return <div key={i} style={{height:mobileLineHeight,lineHeight:mobileLineHeight+"px",fontSize:9,fontFamily:mf,textAlign:"right",paddingRight:10,color:sc,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>;}mobileSectionLine+=1;return <div key={i} style={{height:mobileLineHeight,lineHeight:mobileLineHeight+"px",fontSize:11,fontFamily:mf,textAlign:"right",paddingRight:10,color:isActive?"#7a7e8e":"#3a3a4a",fontWeight:400}}>{mobileSectionLine}</div>;})}</div>
             </div>
-            <textarea ref={mobileTextRef} value={curText} onChange={e=>{setCurText(e.target.value);setTimeout(syncMobileEditor,0);}} onScroll={syncMobileEditor} onClick={syncMobileEditor} onKeyUp={syncMobileEditor} onSelect={e=>{syncMobileEditor();checkSelection(e);}} onTouchEnd={()=>setTimeout(()=>{syncMobileEditor();checkSelection();},200)} spellCheck={false} wrap="off" style={{flex:1,minWidth:0,height:"100%",fontFamily:ff,fontSize:16,lineHeight:mobileLineHeight+"px",letterSpacing:"0.02em",caretColor:"#4af0a0",background:"transparent",color:"#c8ccd8",border:"none",outline:"none",resize:"none",padding:"16px 16px 16px 8px",boxSizing:"border-box",overflow:"auto",whiteSpace:"pre"}}/>
+            {mobileCaret.visible&&<div style={{position:"absolute",left:Math.max(53,mobileCaret.left),top:Math.max(16,mobileCaret.top),width:2,height:mobileLineHeight,borderRadius:999,background:"#4af0a0",pointerEvents:"none",animation:"pulse 1s infinite",zIndex:2}}/>}
+            <textarea ref={mobileTextRef} value={curText} onChange={e=>{setCurText(e.target.value);setTimeout(()=>syncMobileEditor(e.target.value),0);}} onFocus={()=>setTimeout(syncMobileEditor,0)} onBlur={()=>setMobileCaret(c=>({...c,visible:false}))} onScroll={syncMobileEditor} onClick={syncMobileEditor} onKeyUp={syncMobileEditor} onSelect={e=>{syncMobileEditor();checkSelection(e);}} onTouchEnd={()=>setTimeout(()=>{syncMobileEditor();checkSelection();},200)} spellCheck={false} wrap="off" style={{flex:1,minWidth:0,height:"100%",fontFamily:ff,fontSize:16,lineHeight:mobileLineHeight+"px",letterSpacing:"0.02em",caretColor:"transparent",background:"transparent",color:"#c8ccd8",border:"none",outline:"none",resize:"none",padding:"16px 16px 16px 8px",boxSizing:"border-box",overflow:"auto",whiteSpace:"pre"}}/>
           </div>
           {/* Selection toolbar */}
           {showSelBar&&selText&&(<div style={{position:"absolute",bottom:140,left:16,right:16,background:"#111116",border:"1px solid #4a4e5e",borderRadius:12,padding:"8px",display:"flex",justifyContent:"center",gap:4,zIndex:20,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
