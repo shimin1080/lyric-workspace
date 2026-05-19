@@ -105,6 +105,7 @@ export default function MobileApp(){
   const[projPickerOpen,setProjPickerOpen]=useState(false);
   const[editingName,setEditingName]=useState(null);const[editNameVal,setEditNameVal]=useState("");
   const[longPressMenu,setLongPressMenu]=useState(null);
+  const[projectDrag,setProjectDrag]=useState(null);
   const longPressTimer=useRef(null);
 
   const saveTimer=useRef(null);const audioEl=useRef(null);const fileInput=useRef(null);
@@ -114,6 +115,9 @@ export default function MobileApp(){
   const audioCache=useRef({});const mediaRec=useRef(null);const recChunks=useRef([]);
   const audioCtx=useRef(null);const dest=useRef(null);
   const pulledUserRef=useRef(null);
+  const projectPointerRef=useRef(null);
+  const projectDragRef=useRef(null);
+  const suppressProjectClickRef=useRef(false);
 
   const btn={background:"none",border:"none",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"};
 
@@ -155,6 +159,8 @@ export default function MobileApp(){
   const filteredCards=cards.filter(c=>c.projId===activeProj&&(tagFilter==="all"||c.tags.includes(tagFilter)));
   const sections=[];curText.split("\n").forEach(l=>{const lb=getSecLabel(l);if(lb)sections.push({label:lb,color:getSecColor(l)});});
 
+  useEffect(()=>{projectDragRef.current=projectDrag;},[projectDrag]);
+
   const switchProject=id=>{setActiveProj(id);setTagFilter("all");setProjPickerOpen(false);doSave({activeProj:id});};
   const addProject=()=>{if(!newProjTitle.trim())return;if(!isPro&&allProjects.length>=FREE_LIMITS.projects){alert("Free版ではプロジェクトは5件までです。Proにすると無制限で作成できます。");setTab("settings");return;}const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
   const addFolder=()=>{if(!newFolderTitle.trim())return;const nf=[...projectFolders,{id:"folder_"+Date.now(),title:newFolderTitle.trim(),projectIds:[],open:true,locked:false}];setProjectFolders(nf);setShowNewFolder(false);setNewFolderTitle("");doSave({projectFolders:nf});};
@@ -171,6 +177,13 @@ export default function MobileApp(){
   const activeFolder=projectFolders.find(f=>(f.projectIds||[]).includes(activeProj));
   const allProjs=activeFolder?(activeFolder.projectIds||[]).map(id=>allProjects.find(p=>p.id===id)).filter(Boolean):rootProjects;
   const swipeNav=(dir)=>{const idx=allProjs.findIndex(p=>p.id===activeProj);const ni=idx+dir;if(ni>=0&&ni<allProjs.length){switchProject(allProjs[ni].id);}};
+  const findProjectDropTarget=(x,y)=>{const el=document.elementFromPoint(x,y);if(!el)return null;const row=el.closest?.("[data-mobile-project-id]");if(row){const rect=row.getBoundingClientRect();return{folderId:row.dataset.mobileFolderId||null,targetId:row.dataset.mobileProjectId,position:y<rect.top+rect.height/2?"before":"after"};}const folder=el.closest?.("[data-mobile-folder-id]");if(folder)return{folderId:folder.dataset.mobileFolderId,intoFolder:true};const list=el.closest?.("[data-mobile-project-list]");if(list)return{folderId:null,targetId:null,position:"after"};return null;};
+  const applyProjectDrop=(projectId,target)=>{if(!target||target.targetId===projectId)return;const proj=allProjects.find(p=>p.id===projectId);if(!proj)return;let nf=projectFolders.map(f=>({...f,projectIds:(f.projectIds||[]).filter(id=>id!==projectId)}));let np=[...projects];if(target.folderId){nf=nf.map(f=>{if(f.id!==target.folderId)return f;const ids=[...(f.projectIds||[]).filter(id=>id!==projectId)];let idx=target.targetId?ids.indexOf(target.targetId):-1;if(idx<0)idx=ids.length;else if(target.position==="after")idx+=1;ids.splice(idx,0,projectId);return{...f,projectIds:ids,open:true};});}else{if(!np.some(p=>p.id===projectId))np=[...np,proj];np=np.filter(p=>p.id!==projectId);let idx=target.targetId?np.findIndex(p=>p.id===target.targetId):-1;if(idx<0)idx=np.length;else if(target.position==="after")idx+=1;np.splice(idx,0,proj);}setProjects(np);setProjectFolders(nf);doSave({projects:np,projectFolders:nf});};
+  const startProjectDrag=(e,id)=>{if(editingName===id)return;projectPointerRef.current={id,x:e.clientX,y:e.clientY,dragging:false};try{e.currentTarget.setPointerCapture?.(e.pointerId);}catch(err){}};
+  const moveProjectDrag=e=>{const s=projectPointerRef.current;if(!s)return;const moved=Math.abs(e.clientX-s.x)+Math.abs(e.clientY-s.y);if(!s.dragging&&moved>10){s.dragging=true;suppressProjectClickRef.current=true;setLongPressMenu(null);}if(!s.dragging)return;e.preventDefault();const target=findProjectDropTarget(e.clientX,e.clientY);setProjectDrag({id:s.id,target});};
+  const endProjectDrag=e=>{const s=projectPointerRef.current;if(!s)return;if(s.dragging){e.preventDefault();applyProjectDrop(s.id,projectDragRef.current?.target);setTimeout(()=>{suppressProjectClickRef.current=false;},120);}projectPointerRef.current=null;setProjectDrag(null);};
+  const cancelProjectDrag=()=>{projectPointerRef.current=null;setProjectDrag(null);setTimeout(()=>{suppressProjectClickRef.current=false;},120);};
+  const dragRowStyle=(id)=>projectDrag?.id===id?{opacity:.45,outline:"1px solid #4a4e5e"}:{};
 
   /* ── Scrap ── */
   const saveToScrap=()=>{if(!selText.trim())return;const sec=findSection(curText,selText);const nc=[{id:Date.now(),text:selText,tags:[sec],time:ts(),projId:activeProj},...cards];setCards(nc);setShowSelBar(false);setSelText("");doSave({cards:nc});setTab("scraps");};
@@ -238,38 +251,49 @@ export default function MobileApp(){
       </div>
 
       {/* ── Project Picker ── */}
-      {projPickerOpen&&(<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
+      {projPickerOpen&&(<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)"}}/>
-      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,maxHeight:"60vh",overflowY:"auto",boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box"}}>
+      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
           <Search size={13} color="#7a7e8e"/>
           <input value={projectQuery} onChange={e=>setProjectQuery(e.target.value)} placeholder="検索..." style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:"#c8ccd8",fontFamily:ff,fontSize:14}}/>
           {projectQuery&&<button onClick={()=>setProjectQuery("")} style={{...btn,color:"#4a4e5e"}}><XIcon size={12}/></button>}
         </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+          <button onClick={()=>{setShowNewProj(!showNewProj);setShowNewFolder(false);}} style={{...btn,width:"100%",padding:"11px 8px",borderRadius:10,border:"1px dashed #3a3a4a",color:showNewProj?"#4af0a0":"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:12,background:showNewProj?"rgba(74,240,160,0.08)":"transparent"}}><Plus size={14}/>プロジェクト</button>
+          <button onClick={()=>{setShowNewFolder(!showNewFolder);setShowNewProj(false);}} style={{...btn,width:"100%",padding:"11px 8px",borderRadius:10,border:"1px dashed #3a3a4a",color:showNewFolder?"#4af0a0":"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:12,background:showNewFolder?"rgba(74,240,160,0.08)":"transparent"}}><FolderOpen size={14}/>フォルダ</button>
+        </div>
+        {showNewProj&&(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginBottom:10}}>
+          <input placeholder="プロジェクト名" value={newProjTitle} onChange={e=>setNewProjTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
+          <div style={{display:"flex",gap:8}}><button onClick={addProject} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewProj(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
+        </div>)}
+        {showNewFolder&&(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginBottom:10}}>
+          <input placeholder="フォルダ名" value={newFolderTitle} onChange={e=>setNewFolderTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
+          <div style={{display:"flex",gap:8}}><button onClick={addFolder} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewFolder(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
+        </div>)}
+        <div data-mobile-project-list="true" style={{flex:1,overflowY:"auto",minHeight:0}}>
         <div style={{fontSize:10,fontWeight:500,color:"#7a7e8e",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 4px",marginBottom:6}}>PROJECTS</div>
-        {visibleFolders.map(f=>(<div key={f.id} style={{marginBottom:8,border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a"}}>
+        {visibleFolders.map(f=>(<div key={f.id} data-mobile-folder-id={f.id} style={{marginBottom:8,border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a"}}>
           <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px",color:"#7a7e8e"}}>
             <FolderOpen size={14}/><span style={{flex:1,fontSize:13,color:"#c8ccd8",fontWeight:600}}>{f.title}</span>
             <button onClick={()=>toggleFolderLock(f.id)} style={{...btn,padding:4,color:f.locked?"#4af0a0":"#3a3a4a"}}>{f.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
             {!f.locked&&<button onClick={()=>deleteFolder(f.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
           </div>
           {f.items.length===0&&<div style={{fontSize:11,color:"#4a4e5e",padding:"0 12px 8px"}}>空</div>}
-          {f.items.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 28px",borderRadius:8,background:activeProj===p.id?"#2a2a35":"transparent",margin:"0 4px 4px",cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"folder",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
+          {f.items.map((p,idx)=>(<div key={p.id} data-mobile-project-id={p.id} data-mobile-folder-id={f.id} onPointerDown={e=>startProjectDrag(e,p.id)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={()=>{if(suppressProjectClickRef.current||editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 28px",borderRadius:8,background:activeProj===p.id?"#2a2a35":"transparent",margin:"0 4px 4px",cursor:projectDrag?.id===p.id?"grabbing":"grab",touchAction:"none",...dragRowStyle(p.id)}}>
             <FileText size={13} color="#7a7e8e"/>
             <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
             <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
-              <button onClick={()=>moveProjectToRoot(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><ArrowLeft2 size={12}/></button>
               <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
               {!p.locked&&<button onClick={()=>deleteProject(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
             </div>
           </div>))}
         </div>))}
-        {visibleRootProjects.map((p,idx)=>(<div key={p.id} onClick={()=>{if(editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,cursor:"pointer"}} onTouchStart={()=>startLongPress(p.id,"projects",idx)} onTouchEnd={cancelLongPress} onTouchMove={cancelLongPress}>
+        {visibleRootProjects.map((p,idx)=>(<div key={p.id} data-mobile-project-id={p.id} data-mobile-folder-id="" onPointerDown={e=>startProjectDrag(e,p.id)} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} onClick={()=>{if(suppressProjectClickRef.current||editingName===p.id)return;handleTap(p.id,p.title,()=>switchProject(p.id));}} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:activeProj===p.id?"#2a2a35":"transparent",marginBottom:4,cursor:projectDrag?.id===p.id?"grabbing":"grab",touchAction:"none",...dragRowStyle(p.id)}}>
           <FileText size={13} color="#7a7e8e"/>
           <div style={{flex:1,minWidth:0}}>{editingName===p.id?<input autoFocus value={editNameVal} onChange={e=>setEditNameVal(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}} onKeyDown={e=>{if(e.key==="Enter"){renameProject(p.id,editNameVal.trim()||p.title);setEditingName(null);}}} style={{width:"100%",background:"#0a0a0a",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 8px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box"}}/>:<span style={{fontSize:14,color:activeProj===p.id?"#c8ccd8":"#7a7e8e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.title}</span>}</div>
           <div style={{display:"flex",gap:2,alignItems:"center",flexShrink:0}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>toggleLock(p.id)} style={{...btn,padding:4,color:p.locked?"#4af0a0":"#3a3a4a"}}>{p.locked?<Lock size={11}/>:<Unlock size={11}/>}</button>
-            {projectFolders.map(f=><button key={f.id} onClick={()=>moveProjectToFolder(p.id,f.id)} title={f.title} style={{...btn,padding:4,color:"#4a4e5e"}}><ArrowRight size={12}/></button>)}
             {allProjects.length>1&&!p.locked&&<button onClick={()=>deleteProject(p.id)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={12}/></button>}
           </div>
         </div>))}
@@ -298,14 +322,7 @@ export default function MobileApp(){
             <button onClick={()=>{moveToProjects(longPressMenu.id);setLongPressMenu(null);}} style={{padding:"6px 10px",borderRadius:6,border:"1px solid rgba(74,240,160,0.3)",background:"rgba(74,240,160,0.08)",color:"#4af0a0",fontSize:11,fontFamily:ff}}>プロジェクトに移動</button>
           </div>
         </div>)}</>)}
-        {showNewProj?(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginTop:8}}>
-          <input placeholder="プロジェクト名" value={newProjTitle} onChange={e=>setNewProjTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
-          <div style={{display:"flex",gap:8}}><button onClick={addProject} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewProj(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
-        </div>):(<button onClick={()=>setShowNewProj(true)} style={{...btn,width:"100%",padding:"12px",borderRadius:10,border:"1px dashed #3a3a4a",color:"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:13,marginTop:8}}><Plus size={14}/> 新しいプロジェクト</button>)}
-        {showNewFolder?(<div style={{padding:12,background:"#0a0a0a",borderRadius:10,marginTop:8}}>
-          <input placeholder="フォルダ名" value={newFolderTitle} onChange={e=>setNewFolderTitle(e.target.value)} style={{width:"100%",background:"#111116",border:"1px solid #3a3a4a",borderRadius:8,padding:"10px 12px",fontSize:16,color:"#c8ccd8",outline:"none",fontFamily:ff,boxSizing:"border-box",marginBottom:8}}/>
-          <div style={{display:"flex",gap:8}}><button onClick={addFolder} style={{flex:1,padding:"10px",borderRadius:8,border:"none",background:"#4af0a0",color:"#111116",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:ff}}>作成</button><button onClick={()=>setShowNewFolder(false)} style={{flex:1,padding:"10px",borderRadius:8,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:13,cursor:"pointer",fontFamily:ff}}>取消</button></div>
-        </div>):(<button onClick={()=>setShowNewFolder(true)} style={{...btn,width:"100%",padding:"12px",borderRadius:10,border:"1px dashed #3a3a4a",color:"#7a7e8e",gap:6,justifyContent:"center",fontFamily:ff,fontSize:13,marginTop:8}}><FolderOpen size={14}/> 新しいフォルダ</button>)}
+        </div>
       </div></div>)}
 
       {/* ── Content ── */}
