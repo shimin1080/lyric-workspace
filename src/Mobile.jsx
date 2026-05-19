@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, loadAudio, deleteAudio, clearAllAudio } from "./storage.js";
 import { useAuth, AuthUI, SyncBadge, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
-import { FREE_LIMITS } from "./billing.js";
 import { NativeUpdaterPanel, NativeUpdaterToast } from "./updater.jsx";
 
 /* ── Icons ─────────────────────────────────── */
@@ -71,7 +70,7 @@ const ff="'Courier New','JetBrains Mono',ui-monospace,Menlo,monospace";const mf=
 export default function MobileApp(){
   const remoteRef=useRef(null);
   const audioSyncRef=useRef(null);
-  const{user,authLoading,syncStatus,login,logout,push,pushNow,pushAudio,removeAudio,hasSupabase,billing,isPro,refreshBilling,startUpgrade,manageBilling}=useAuth(
+  const{user,authLoading,syncStatus,login,logout,push,pushNow,pushAudio,removeAudio,hasSupabase}=useAuth(
     useCallback((data)=>{if(remoteRef.current)remoteRef.current(data);},[]),
     useCallback(async(userId,aLib,rLib)=>{if(audioSyncRef.current)await audioSyncRef.current(userId,aLib,rLib);},[])
   );
@@ -164,7 +163,7 @@ export default function MobileApp(){
   useEffect(()=>{projectDragRef.current=projectDrag;},[projectDrag]);
 
   const switchProject=id=>{setActiveProj(id);setTagFilter("all");setProjPickerOpen(false);doSave({activeProj:id});};
-  const addProject=()=>{if(!newProjTitle.trim())return;if(!isPro&&allProjects.length>=FREE_LIMITS.projects){alert("Free版ではプロジェクトは5件までです。Proにすると無制限で作成できます。");setTab("settings");return;}const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
+  const addProject=()=>{if(!newProjTitle.trim())return;const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
   const addFolder=()=>{if(!newFolderTitle.trim())return;const nf=[...projectFolders,{id:"folder_"+Date.now(),title:newFolderTitle.trim(),projectIds:[],open:true,locked:false}];setProjectFolders(nf);setShowNewFolder(false);setNewFolderTitle("");doSave({projectFolders:nf});};
   const toggleFolderOpen=id=>{const nf=projectFolders.map(f=>f.id===id?{...f,open:f.open===false?true:false}:f);setProjectFolders(nf);doSave({projectFolders:nf});};
   const toggleFolderLock=id=>{const nf=projectFolders.map(f=>f.id===id?{...f,locked:!f.locked}:f);setProjectFolders(nf);doSave({projectFolders:nf});};
@@ -201,7 +200,7 @@ export default function MobileApp(){
   /* ── Audio ── */
   const playTrack=useCallback((meta,b64)=>{const a=audioEl.current;if(!a)return;if(meta.id===activeTrackId&&a.src){if(isPlaying){a.pause();setIsPlaying(false);}else{a.play().then(()=>setIsPlaying(true)).catch(()=>{});}return;}a.pause();a.src=b64;a.volume=isMuted?0:volume;a.loop=repeatOn;setTrackName(meta.name);setActiveTrackId(meta.id);setSeekPos(0);setCurTime(0);setDur(0);a.load();const r=()=>{a.play().then(()=>setIsPlaying(true)).catch(()=>{});a.removeEventListener("canplay",r);};a.addEventListener("canplay",r);},[isMuted,volume,activeTrackId,isPlaying,repeatOn]);
   const loadAndPlay=useCallback(async(meta,prefix=S_AP)=>{let b=audioCache.current[meta.id];if(!b){b=await loadAudio(prefix+meta.id);if(!b)return;audioCache.current[meta.id]=b;}playTrack(meta,b);},[playTrack]);
-  const handleFileUpload=async e=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;if(!isPro&&audioLib.length>=FREE_LIMITS.audio){alert("Free版では音源は3曲までです。Proにすると無制限で追加できます。");setTab("settings");return;}setUploadingAudio(true);const reader=new FileReader();reader.onload=async ev=>{const b64=ev.target.result;const id="aud_"+Date.now();const meta={id,name:file.name.replace(/\.[^.]+$/,""),size:file.size,ext:file.name.split(".").pop()};const ok=await saveAudio(S_AP+id,b64);if(!ok){alert("ファイルサイズ上限超過");setUploadingAudio(false);return;}audioCache.current[id]=b64;pushAudio(id,b64);const nal=[...audioLib,meta];setAudioLib(nal);doSave({audioLib:nal});playTrack(meta,b64);setUploadingAudio(false);};reader.readAsDataURL(file);};
+  const handleFileUpload=async e=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;setUploadingAudio(true);const reader=new FileReader();reader.onload=async ev=>{const b64=ev.target.result;const id="aud_"+Date.now();const meta={id,name:file.name.replace(/\.[^.]+$/,""),size:file.size,ext:file.name.split(".").pop()};const ok=await saveAudio(S_AP+id,b64);if(!ok){alert("ファイルサイズ上限超過");setUploadingAudio(false);return;}audioCache.current[id]=b64;pushAudio(id,b64);const nal=[...audioLib,meta];setAudioLib(nal);doSave({audioLib:nal});playTrack(meta,b64);setUploadingAudio(false);};reader.readAsDataURL(file);};
   const removeTrack=async(id,lib,setLib,prefix,key)=>{const track=lib.find(t=>t.id===id);const trashItem={id:"tr_"+Date.now(),type:key==="audioLib"?"audio":"recording",data:{track},deletedAt:Date.now()};const nt=[...trash,trashItem];setTrash(nt);const nl=lib.filter(t=>t.id!==id);setLib(nl);if(activeTrackId===id){audioEl.current?.pause();setTrackName("");setIsPlaying(false);setActiveTrackId(null);}doSave({trash:nt,[key]:nl});};
 
   // Trash functions
@@ -223,7 +222,7 @@ export default function MobileApp(){
   const handleSeek=v=>{setSeekPos(v);if(audioEl.current&&dur)audioEl.current.currentTime=(v/100)*dur;};
 
   /* ── Recording ── */
-  const startRec=async()=>{if(!isPro&&recLib.length>=FREE_LIMITS.recordings){alert("Free版では録音は3件までです。Proにすると無制限で録音できます。");setTab("settings");return;}try{const ms=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,autoGainControl:false,noiseSuppression:false}});const ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:48000});audioCtx.current=ctx;await ctx.resume();const d=ctx.createMediaStreamDestination();d.channelCount=2;d.channelCountMode="explicit";d.channelInterpretation="speakers";const mixBus=ctx.createGain();mixBus.channelCount=2;mixBus.channelCountMode="explicit";mixBus.channelInterpretation="speakers";mixBus.connect(d);dest.current=d;ctx.createMediaStreamSource(ms).connect(mixBus);const a=audioEl.current;if(a&&a.src){try{const s2=a.captureStream?a.captureStream():a.mozCaptureStream();ctx.createMediaStreamSource(s2).connect(mixBus);}catch(e){}if(a.paused){a.play().then(()=>setIsPlaying(true)).catch(()=>{});}}recChunks.current=[];const mr=new MediaRecorder(d.stream,{mimeType:MediaRecorder.isTypeSupported("audio/webm;codecs=opus")?"audio/webm;codecs=opus":"audio/webm"});mr.ondataavailable=e=>{if(e.data.size>0)recChunks.current.push(e.data);};mr.onstop=async()=>{ms.getTracks().forEach(t=>t.stop());const blob=new Blob(recChunks.current,{type:"audio/webm"});const r=new FileReader();r.onload=async ev=>{const b64=ev.target.result;const id="rec_"+Date.now();const meta={id,name:"録音_"+ts().replace(":",""),size:blob.size,ext:"webm"};await saveAudio(S_RC+id,b64);audioCache.current[id]=b64;pushAudio(id,b64);const nrl=[...recLib,meta];setRecLib(nrl);doSave({recLib:nrl});};r.readAsDataURL(blob);try{ctx.close();}catch(e){}audioCtx.current=null;};mr.start(100);mediaRec.current=mr;setIsRecording(true);}catch(e){alert("マイクアクセスを許可してください\n"+e.message);}};
+  const startRec=async()=>{try{const ms=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,autoGainControl:false,noiseSuppression:false}});const ctx=new(window.AudioContext||window.webkitAudioContext)({sampleRate:48000});audioCtx.current=ctx;await ctx.resume();const d=ctx.createMediaStreamDestination();d.channelCount=2;d.channelCountMode="explicit";d.channelInterpretation="speakers";const mixBus=ctx.createGain();mixBus.channelCount=2;mixBus.channelCountMode="explicit";mixBus.channelInterpretation="speakers";mixBus.connect(d);dest.current=d;ctx.createMediaStreamSource(ms).connect(mixBus);const a=audioEl.current;if(a&&a.src){try{const s2=a.captureStream?a.captureStream():a.mozCaptureStream();ctx.createMediaStreamSource(s2).connect(mixBus);}catch(e){}if(a.paused){a.play().then(()=>setIsPlaying(true)).catch(()=>{});}}recChunks.current=[];const mr=new MediaRecorder(d.stream,{mimeType:MediaRecorder.isTypeSupported("audio/webm;codecs=opus")?"audio/webm;codecs=opus":"audio/webm"});mr.ondataavailable=e=>{if(e.data.size>0)recChunks.current.push(e.data);};mr.onstop=async()=>{ms.getTracks().forEach(t=>t.stop());const blob=new Blob(recChunks.current,{type:"audio/webm"});const r=new FileReader();r.onload=async ev=>{const b64=ev.target.result;const id="rec_"+Date.now();const meta={id,name:"録音_"+ts().replace(":",""),size:blob.size,ext:"webm"};await saveAudio(S_RC+id,b64);audioCache.current[id]=b64;pushAudio(id,b64);const nrl=[...recLib,meta];setRecLib(nrl);doSave({recLib:nrl});};r.readAsDataURL(blob);try{ctx.close();}catch(e){}audioCtx.current=null;};mr.start(100);mediaRec.current=mr;setIsRecording(true);}catch(e){alert("マイクアクセスを許可してください\n"+e.message);}};
   const stopRec=()=>{if(mediaRec.current&&isRecording){mediaRec.current.stop();mediaRec.current=null;setIsRecording(false);}};
 
   /* ── Selection check ── */
@@ -232,7 +231,7 @@ export default function MobileApp(){
   const hasSrc=!!activeTrackId;
 
   if(loading||authLoading||cloudLoading)return(<div style={{fontFamily:ff,position:"fixed",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#0a0a0a",color:"#7a7e8e",fontSize:14}}>読み込み中...</div>);
-  if(!user)return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling}/>;
+  if(!user)return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase}/>;
 
   return(
     <div style={{fontFamily:ff,position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",flexDirection:"column",background:"#0a0a0a",color:"#c8ccd8",overflow:"hidden",maxWidth:480,margin:"0 auto"}}>
@@ -258,9 +257,9 @@ export default function MobileApp(){
       </div>
 
       {/* ── Project Picker ── */}
-      {projPickerOpen&&(<div onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
+      {projPickerOpen&&(<div className="lw-motion-backdrop" onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)"}}/>
-      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="lw-motion-drawer" onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
           <Search size={13} color="#7a7e8e"/>
           <input value={projectQuery} onChange={e=>setProjectQuery(e.target.value)} placeholder="検索..." style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:"#c8ccd8",fontFamily:ff,fontSize:14}}/>
@@ -422,7 +421,7 @@ export default function MobileApp(){
         {tab==="settings"&&(<div style={{flex:1,overflowY:"auto",padding:16}}>
           <div style={{fontSize:16,fontWeight:600,color:"#c8ccd8",marginBottom:16}}>設定</div>
           <div style={{background:"#111116",borderRadius:12,border:"1px solid #2a2a35",padding:16,marginBottom:16}}>
-            <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} compact />
+            <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} compact />
           </div>
           <div style={{background:"#111116",borderRadius:12,border:"1px solid #2a2a35",padding:16,marginBottom:16}}>
             <NativeUpdaterPanel compact />

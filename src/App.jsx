@@ -3,7 +3,6 @@ import { loadData as _loadData, saveData as _saveData, deleteData, saveAudio, lo
 import { useAuth, AuthUI, AuthGate } from "./Auth.jsx";
 import { syncAudioOnLogin } from "./sync.js";
 import { getNativeRecordingStatus, isNativeRecordingAvailable, listNativeInputDevices, startNativeRecording, stopNativeRecording } from "./nativeRecording.js";
-import { FREE_LIMITS } from "./billing.js";
 import { NativeUpdaterPanel, NativeUpdaterToast } from "./updater.jsx";
 
 /* ── Icons ─────────────────────────────────── */
@@ -290,7 +289,7 @@ export default function LyricWorkspace() {
   // State refs for remote sync callback
   const remoteRef = useRef(null);
   const audioSyncRef = useRef(null);
-  const { user, authLoading, syncStatus, login, logout, push, pushNow, pushAudio, removeAudio, hasSupabase, billing, isPro, refreshBilling, startUpgrade, manageBilling } = useAuth(
+  const { user, authLoading, syncStatus, login, logout, push, pushNow, pushAudio, removeAudio, hasSupabase } = useAuth(
     useCallback((data) => { if (remoteRef.current) remoteRef.current(data); }, []),
     useCallback(async (userId, aLib, rLib) => { if (audioSyncRef.current) await audioSyncRef.current(userId, aLib, rLib); }, [])
   );
@@ -346,7 +345,6 @@ export default function LyricWorkspace() {
   const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("");
   const [inputLevel, setInputLevel] = useState(0);
   const [inputError, setInputError] = useState("");
-  const [limitMessage, setLimitMessage] = useState("");
 
   const saveTimerRef = useRef(null);
   const stateRef = useRef({});
@@ -368,10 +366,6 @@ export default function LyricWorkspace() {
   stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
-  const showLimit = useCallback((message) => {
-    setLimitMessage(message);
-    setShowSettings(true);
-  }, []);
 
   // Remote sync callback
   useEffect(() => {
@@ -561,7 +555,7 @@ export default function LyricWorkspace() {
 
   // Project CRUD
   const switchProject = (id) => { setActiveProj(id); setTagFilter("all"); doSave({ activeProj: id }); };
-  const addProject = () => { if (!newProjTitle.trim()) return; if (!isPro && allProjects.length >= FREE_LIMITS.projects) { showLimit("Free版ではプロジェクトは5件までです。Proにすると無制限で作成できます。"); return; } const id = "proj_" + Date.now(); const np = [...projects, { id, title: newProjTitle.trim(), emoji: "🎵" }]; const nl = { ...lyrics, [id]: "" }; setProjects(np); setLyrics(nl); setActiveProj(id); setShowNewProj(false); setNewProjTitle(""); doSave({ projects: np, lyrics: nl, activeProj: id }); };
+  const addProject = () => { if (!newProjTitle.trim()) return; const id = "proj_" + Date.now(); const np = [...projects, { id, title: newProjTitle.trim(), emoji: "🎵" }]; const nl = { ...lyrics, [id]: "" }; setProjects(np); setLyrics(nl); setActiveProj(id); setShowNewProj(false); setNewProjTitle(""); doSave({ projects: np, lyrics: nl, activeProj: id }); };
   const addFolder = () => { if (!newFolderTitle.trim()) return; const nf = [...projectFolders, { id: "folder_" + Date.now(), title: newFolderTitle.trim(), projectIds: [], open: true, locked: false }]; setProjectFolders(nf); setShowNewFolder(false); setNewFolderTitle(""); doSave({ projectFolders: nf }); };
   const renameFolder = (id, title) => { const nf = projectFolders.map((f) => f.id === id ? { ...f, title } : f); setProjectFolders(nf); doSave({ projectFolders: nf }); };
   const toggleFolderLock = (id) => { const nf = projectFolders.map((f) => f.id === id ? { ...f, locked: !f.locked } : f); setProjectFolders(nf); doSave({ projectFolders: nf }); };
@@ -955,7 +949,7 @@ export default function LyricWorkspace() {
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
   const loadAndPlay = useCallback(async (meta, prefix) => { let b = audioCacheRef.current[meta.id]; if (!b) { b = await loadAudio(prefix + meta.id); if (!b) return; audioCacheRef.current[meta.id] = b; } playTrack(meta, b); }, [playTrack]);
-  const handleFileUpload = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; if (!isPro && audioLib.length >= FREE_LIMITS.audio) { showLimit("Free版では音源は3曲までです。Proにすると無制限で追加できます。"); return; } setUploadingAudio(true); const reader = new FileReader(); reader.onload = async (ev) => { const b64 = ev.target.result; const id = "aud_" + Date.now(); const meta = { id, name: file.name.replace(/\.[^.]+$/, ""), size: file.size, ext: file.name.split(".").pop() }; const ok = await saveAudio(S_AP + id, b64); if (!ok) { alert("ファイルサイズ上限超過"); setUploadingAudio(false); return; } audioCacheRef.current[id] = b64; pushAudio(id, b64); const nal = [...audioLib, meta]; setAudioLib(nal); doSave({ audioLib: nal }); playTrack(meta, b64); setModal(false); setUploadingAudio(false); }; reader.readAsDataURL(file); };
+  const handleFileUpload = async (e) => { const file = e.target.files?.[0]; e.target.value = ""; if (!file) return; setUploadingAudio(true); const reader = new FileReader(); reader.onload = async (ev) => { const b64 = ev.target.result; const id = "aud_" + Date.now(); const meta = { id, name: file.name.replace(/\.[^.]+$/, ""), size: file.size, ext: file.name.split(".").pop() }; const ok = await saveAudio(S_AP + id, b64); if (!ok) { alert("ファイルサイズ上限超過"); setUploadingAudio(false); return; } audioCacheRef.current[id] = b64; pushAudio(id, b64); const nal = [...audioLib, meta]; setAudioLib(nal); doSave({ audioLib: nal }); playTrack(meta, b64); setModal(false); setUploadingAudio(false); }; reader.readAsDataURL(file); };
   const renameTrk = (lib, setLib, key, id, n) => { const nl = lib.map((t) => t.id === id ? { ...t, name: n } : t); setLib(nl); if (activeTrackId === id) setTrackName(n); doSave({ [key]: nl }); };
   const toggleTrackLock = (lib, setLib, key, id) => { const nl = lib.map(t => t.id === id ? { ...t, locked: !t.locked } : t); setLib(nl); doSave({ [key]: nl }); };
   const reorderTrack = (lib, setLib, key, fromId, toId) => { if (!fromId || !toId || fromId === toId) return; const nl = moveInArray(lib, lib.findIndex((t) => t.id === fromId), lib.findIndex((t) => t.id === toId)); setLib(nl); doSave({ [key]: nl }); };
@@ -1020,10 +1014,6 @@ export default function LyricWorkspace() {
 
   // Recording (mic + track)
   const startRecording = async () => {
-    if (!isPro && recLib.length >= FREE_LIMITS.recordings) {
-      showLimit("Free版では録音は3件までです。Proにすると無制限で録音できます。");
-      return;
-    }
     if (await isNativeRecordingAvailable()) {
       try {
         const a = audioElRef.current;
@@ -1201,7 +1191,7 @@ export default function LyricWorkspace() {
   const onCtx = useCallback((e) => { e.preventDefault(); const s = window.getSelection().toString().trim(); if (s) { setSelText(s); setCtxMenu({ x: e.clientX, y: e.clientY }); } }, []);
 
   if (loading || authLoading || cloudLoading) return (<div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0d", color: "#4a4e5e", fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>// loading...</div>);
-  if (!user) return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} />;
+  if (!user) return <AuthGate user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} />;
 
   return (
     <div style={{ fontFamily: ff, height: "100vh", width: "100%", display: "flex", flexDirection: "column", background: "#0a0a0d", color: "#c8ccd8", overflow: "hidden", letterSpacing: "0.01em" }}>
@@ -1223,7 +1213,7 @@ export default function LyricWorkspace() {
 
         {/* LEFT SIDEBAR */}
         {sidebarOpen && (
-          <div style={{ width: 220, flexShrink: 0, borderRight: "1px solid #2a2a35", background: "#111116", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div className="lw-motion-sidebar" style={{ width: 220, flexShrink: 0, borderRight: "1px solid #2a2a35", background: "#111116", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             <div style={{ padding: 12, flex: 1, overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 2, background: "#18181f", border: "1px solid #2a2a35", marginBottom: 16 }}><Search size={13} color="#7a7e8e" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="// search..." style={{ background: "transparent", border: "none", outline: "none", fontSize: 12, color: "#c8ccd8", width: "100%", fontFamily: ff }} />{searchQuery && <button onClick={() => setSearchQuery("")} style={{ ...btn, color: "#4a4e5e" }}><XIcon size={11} /></button>}</div>
 
@@ -1310,6 +1300,7 @@ export default function LyricWorkspace() {
                           onMouseUp={(e) => dropOnFolder(f.id, e)}
                           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; if (!e.target.closest("[data-project-id]")) hoverSidebarDropTarget({ folderId: f.id }, e, true); }}
                           onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const src = projectDragData(e); if (src.type === "project") moveProjectToFolder(src.id, f.id); }}
+                          className="lw-motion-panel"
                           style={{ position: "fixed", left: 224, top: folderFlyout.top, zIndex: 1200, width: 190, maxHeight: 260, overflowY: "auto", padding: 6, borderRadius: 2, background: "#111", border: "1px solid #2f2f2f", boxShadow: "0 18px 36px rgba(0,0,0,0.42)" }}
                         >
 		                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 7px 7px", color: "#7a7e8e", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}><FolderOpen size={11} />{f.title}</div>
@@ -1458,18 +1449,17 @@ export default function LyricWorkspace() {
       </div>
 
       {/* UPLOAD MODAL */}
-      {modal && (<div onClick={() => setModal(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 420, margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35" }}><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>オーディオソース</span><button onClick={() => setModal(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div><div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}><div onClick={() => fileInputRef.current?.click()} style={{ border: "2px dashed #4a4e5e", borderRadius: 2, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}><Upload size={18} color="#7a7e8e" /><span style={{ fontSize: 11, color: "#7a7e8e" }}>MP3, WAV, FLAC を選択</span></div>{audioLib.length > 0 && <div><div style={{ fontSize: 11, color: "#7a7e8e", marginBottom: 6 }}>ライブラリから選択</div><div style={{ maxHeight: 150, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>{audioLib.map((t) => (<button key={t.id} onClick={() => { loadAndPlay(t, S_AP); setModal(false); }} style={{ ...btn, width: "100%", gap: 6, padding: "7px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 11, background: activeTrackId === t.id ? "rgba(74,240,160,0.08)" : "#0a0a0a", color: activeTrackId === t.id ? "#4af0a0" : "#c8ccd8", border: "1px solid #2a2a35" }}><Headphones size={12} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span></button>))}</div></div>}</div></div></div>)}
+      {modal && (<div className="lw-motion-backdrop" onClick={() => setModal(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div className="lw-motion-panel" onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 420, margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35" }}><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>オーディオソース</span><button onClick={() => setModal(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div><div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 14 }}><div onClick={() => fileInputRef.current?.click()} style={{ border: "2px dashed #4a4e5e", borderRadius: 2, padding: 20, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}><Upload size={18} color="#7a7e8e" /><span style={{ fontSize: 11, color: "#7a7e8e" }}>MP3, WAV, FLAC を選択</span></div>{audioLib.length > 0 && <div><div style={{ fontSize: 11, color: "#7a7e8e", marginBottom: 6 }}>ライブラリから選択</div><div style={{ maxHeight: 150, overflowY: "auto", display: "flex", flexDirection: "column", gap: 3 }}>{audioLib.map((t) => (<button key={t.id} onClick={() => { loadAndPlay(t, S_AP); setModal(false); }} style={{ ...btn, width: "100%", gap: 6, padding: "7px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 11, background: activeTrackId === t.id ? "rgba(74,240,160,0.08)" : "#0a0a0a", color: activeTrackId === t.id ? "#4af0a0" : "#c8ccd8", border: "1px solid #2a2a35" }}><Headphones size={12} /><span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.name}</span></button>))}</div></div>}</div></div></div>)}
 
       {/* SETTINGS MODAL */}
-      {showSettings && (<div onClick={() => setShowSettings(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 440, maxHeight: "80vh", margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35", flexShrink: 0 }}><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>設定</span><button onClick={() => setShowSettings(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div><div style={{ padding: 18, overflowY: "auto" }}>
-        {limitMessage && <div style={{ background: "rgba(74,240,160,0.08)", border: "1px solid rgba(74,240,160,0.22)", borderRadius: 2, padding: 12, marginBottom: 12, color: "#4af0a0", fontSize: 12, lineHeight: 1.5 }}>{limitMessage}</div>}
-        <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} billing={billing} onUpgrade={startUpgrade} onManageBilling={manageBilling} onRefreshBilling={refreshBilling} />
+      {showSettings && (<div className="lw-motion-backdrop" onClick={() => setShowSettings(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div className="lw-motion-panel" onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 440, maxHeight: "80vh", margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35", flexShrink: 0 }}><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>設定</span><button onClick={() => setShowSettings(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div><div style={{ padding: 18, overflowY: "auto" }}>
+        <AuthUI user={user} onLogin={login} onLogout={logout} syncStatus={syncStatus} hasSupabase={hasSupabase} />
         <NativeUpdaterPanel />
         <div style={{ borderTop: "1px solid #2a2a35", paddingTop: 16, marginTop: 16 }}><div style={{ fontSize: 12, color: "#c8ccd8", marginBottom: 4 }}>データ管理</div><div style={{ fontSize: 11, color: "#7a7e8e", marginBottom: 12 }}>すべてのデータを初期状態にリセット（取消不可）</div><button onClick={() => setConfirmReset(true)} style={{ padding: "7px 14px", borderRadius: 2, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: 11, cursor: "pointer", fontFamily: ff }}>リセット</button><div style={{ borderTop: "1px solid #2a2a35", paddingTop: 14, marginTop: 14 }}><div style={{ fontSize: 11, color: "#7a7e8e" }}>プロジェクト: {projects.length} / スクラップ: {cards.length} / 音楽: {audioLib.length} / 録音: {recLib.length}</div></div></div>
       </div></div></div>)}
 
       {/* CONFIRM RESET */}
-      {confirmReset && (<div onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}><div onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, padding: 24, width: "100%", maxWidth: 340, margin: "0 16px", textAlign: "center" }}>
+      {confirmReset && (<div className="lw-motion-backdrop" onClick={() => setConfirmReset(false)} style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)" }}><div className="lw-motion-panel" onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, padding: 24, width: "100%", maxWidth: 340, margin: "0 16px", textAlign: "center" }}>
         <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
         <div style={{ fontSize: 14, fontWeight: 500, color: "#c8ccd8", marginBottom: 8 }}>本当にリセットしますか？</div>
         <div style={{ fontSize: 12, color: "#7a7e8e", marginBottom: 20, lineHeight: 1.5 }}>すべてのプロジェクト・歌詞・スクラップ・メモ・音楽・録音データが完全に削除されます。この操作は取り消せません。</div>
@@ -1477,7 +1467,7 @@ export default function LyricWorkspace() {
       </div></div>)}
 
       {/* TRASH MODAL */}
-      {showTrash && (<div onClick={() => setShowTrash(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 480, maxHeight: "80vh", margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {showTrash && (<div className="lw-motion-backdrop" onClick={() => setShowTrash(false)} style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}><div className="lw-motion-panel" onClick={(e) => e.stopPropagation()} style={{ background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, width: "100%", maxWidth: 480, maxHeight: "80vh", margin: "0 16px", boxShadow: "0 24px 48px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #2a2a35", flexShrink: 0 }}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><Trash2 size={15} color="#7a7e8e" /><span style={{ fontSize: 13, fontWeight: 500, color: "#c8ccd8" }}>ゴミ箱</span><span style={{ fontSize: 10, color: "#4a4e5e" }}>{trash.length}件</span></div><button onClick={() => setShowTrash(false)} style={{ ...btn, padding: 4, borderRadius: 2, color: "#7a7e8e" }}><XIcon size={15} /></button></div>
         <div style={{ flex: 1, overflowY: "auto", padding: 14 }}>
           {trash.length === 0 && <div style={{ textAlign: "center", padding: "40px 0", color: "#4a4e5e", fontSize: 12 }}>ゴミ箱は空です</div>}
