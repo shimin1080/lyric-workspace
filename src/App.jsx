@@ -1354,6 +1354,10 @@ export default function LyricWorkspace() {
                                 style={{ display: "flex", alignItems: "center", marginBottom: 2, position: "relative", opacity: dragProjId === p.id ? 0.32 : 1, borderRadius: 2, ...rowMotion }}
                               >
 		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span></button>
+                              <div style={{ position: "absolute", right: 4, display: "flex", gap: 1, alignItems: "center" }}>
+                                <button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); toggleLock(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: p.locked ? "#4af0a0" : "#3a3a4a" }}>{p.locked ? <Lock size={9} /> : <Unlock size={9} />}</button>
+                                {allProjects.length > 1 && !p.locked && (<button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: "#4a4e5e", opacity: 0.4 }}><XIcon size={10} /></button>)}
+                              </div>
                               </div>
                             </Fragment>
 		                      ))}
