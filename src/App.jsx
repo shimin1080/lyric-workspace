@@ -30,6 +30,7 @@ const RepeatIcon=(p)=><I {...p} d={<><polyline points="17 1 21 5 17 9"/><path d=
 const Upload=(p)=><I {...p} d={<><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>}/>;
 const XIcon=(p)=><I {...p} d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>}/>;
 const CheckIcon=(p)=><I {...p} d={<><polyline points="20 6 9 17 4 12"/></>}/>;
+const CopyIcon=(p)=><I {...p} d={<><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></>}/>;
 const Loader=({size=14,color="#4af0a0"})=>(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" style={{flexShrink:0,animation:"spin 1s linear infinite"}}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>);
 const Disc=(p)=><I {...p} d={<><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></>}/>;
 const Headphones=(p)=><I {...p} d={<><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z"/></>}/>;
@@ -271,12 +272,28 @@ function SectionNav({ text }) {
 
 function ScrapCard({ card, onDelete }) {
   const [h, setH] = useState(false);
+  const copyText = (e) => {
+    e.stopPropagation();
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(card.text).catch(() => {});
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = card.text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  };
   return (
     <div draggable onDragStart={(e) => { e.dataTransfer.setData("text/plain", card.text); e.dataTransfer.effectAllowed = "copy"; }} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: "#111116", border: h ? "1px solid #4a4e5e" : "1px solid #2a2a35", borderRadius: 2, padding: 10, cursor: "grab", transition: "border-color 0.15s" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <span style={{ fontSize: 10, color: "#4a4e5e" }}>{card.time}</span>
-        <div style={{ display: "flex", gap: 2, opacity: h ? 1 : 0, transition: "opacity 0.15s" }}>
-          <button onClick={onDelete} style={{ padding: 3, background: "none", border: "none", cursor: "pointer", borderRadius: 2, color: "#4a4e5e" }}><Trash2 size={10} /></button>
+        <div onMouseDown={(e) => e.stopPropagation()} style={{ display: "flex", gap: 2, opacity: h ? 1 : 0, transition: "opacity 0.15s" }}>
+          <button onClick={copyText} title="コピー" style={{ padding: 3, background: "none", border: "none", cursor: "pointer", borderRadius: 2, color: "#7a7e8e" }}><CopyIcon size={10} /></button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); }} title="削除" style={{ padding: 3, background: "none", border: "none", cursor: "pointer", borderRadius: 2, color: "#4a4e5e" }}><Trash2 size={10} /></button>
         </div>
       </div>
       <p style={{ fontSize: 11, lineHeight: 1.6, whiteSpace: "pre-line", color: "#c8ccd8", margin: "0 0 8px 0" }}>{card.text}</p>
@@ -928,8 +945,13 @@ export default function LyricWorkspace() {
   const dropLine = () => null;
   const dropOutline = {};
   const openFolderFlyout = (f, e) => {
+    e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    setFolderFlyout((cur) => cur?.id === f.id ? null : { id: f.id, top: Math.min(Math.max(96, rect.top - 4), window.innerHeight - 260) });
+    const width = 190;
+    const gap = 8;
+    const left = Math.min(Math.max(8, rect.right + gap), Math.max(8, window.innerWidth - width - 8));
+    const top = Math.min(Math.max(72, rect.top - 4), Math.max(72, window.innerHeight - 280));
+    setFolderFlyout((cur) => cur?.id === f.id ? null : { id: f.id, left, top });
   };
   const deleteProject = (id) => { const inProjects = projects.find(p => p.id === id); const inList = projectList.find(p => p.id === id); if (allProjects.length <= 1) return; const proj = inProjects || inList; if (!proj || proj.locked) return; const trashItem = { id: "tr_" + Date.now(), type: "project", data: { project: proj, lyrics: lyrics[id], cards: cards.filter(c => c.projId === id), memo: memo[id] }, deletedAt: Date.now() }; const nt = [...trash, trashItem]; const np = projects.filter((p) => p.id !== id); const npl = projectList.filter((p) => p.id !== id); const nf = projectFolders.map((f) => ({ ...f, projectIds: (f.projectIds || []).filter((pid) => pid !== id) })); const nl = { ...lyrics }; delete nl[id]; const nc = cards.filter((c) => c.projId !== id); const na = id === activeProj ? (np[0] || npl[0])?.id || "proj_1" : activeProj; const nm = { ...memo }; delete nm[id]; setTrash(nt); setProjects(np); setProjectList(npl); setProjectFolders(nf); setLyrics(nl); setCards(nc); setActiveProj(na); setMemo(nm); doSave({ trash: nt, projects: np, projectList: npl, projectFolders: nf, lyrics: nl, cards: nc, activeProj: na, memo: nm }); };
   const renameProject = (id, n) => { const np = projects.map((p) => p.id === id ? { ...p, title: n } : p); const npl = projectList.map((p) => p.id === id ? { ...p, title: n } : p); setProjects(np); setProjectList(npl); doSave({ projects: np, projectList: npl }); };
@@ -1312,8 +1334,8 @@ export default function LyricWorkspace() {
                           onMouseUp={(e) => dropOnFolder(f.id, e)}
                           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; if (!e.target.closest("[data-project-id]")) hoverSidebarDropTarget({ folderId: f.id }, e, true); }}
                           onDrop={(e) => { e.preventDefault(); e.stopPropagation(); const src = projectDragData(e); if (src.type === "project") moveProjectToFolder(src.id, f.id); }}
-                          className="lw-motion-panel"
-                          style={{ position: "fixed", left: 224, top: folderFlyout.top, zIndex: 1200, width: 190, maxHeight: 260, overflowY: "auto", padding: 6, borderRadius: 2, background: "#111", border: "1px solid #2f2f2f", boxShadow: "0 18px 36px rgba(0,0,0,0.42)" }}
+                          className="lw-motion-flyout"
+                          style={{ position: "fixed", left: folderFlyout.left ?? 224, top: folderFlyout.top, zIndex: 2400, width: 190, maxHeight: 260, overflowY: "auto", padding: 6, borderRadius: 2, background: "#111", border: "1px solid #2f2f2f", boxShadow: "0 18px 36px rgba(0,0,0,0.42)" }}
                         >
 		                      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 7px 7px", color: "#7a7e8e", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em" }}><FolderOpen size={11} />{f.title}</div>
 		                      {items.length === 0 && <div style={{ padding: "6px 8px", fontSize: 10, color: "#4a4e5e" }}>空</div>}

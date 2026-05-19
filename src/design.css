@@ -115,12 +115,22 @@ select:focus {
   to { opacity: 1; transform: translate3d(-50%, 0, 0); }
 }
 
+@keyframes lwFlyoutIn {
+  from { opacity: 0; transform: translate3d(-10px, 0, 0) scale(0.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
 .lw-motion-backdrop {
   animation: lwFadeIn 180ms var(--lw-motion) both;
 }
 
 .lw-motion-panel {
   animation: lwPanelIn 240ms var(--lw-motion) both;
+  will-change: transform, opacity;
+}
+
+.lw-motion-flyout {
+  animation: lwFlyoutIn 200ms var(--lw-motion) both;
   will-change: transform, opacity;
 }
 
