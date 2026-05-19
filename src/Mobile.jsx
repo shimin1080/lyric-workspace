@@ -51,9 +51,10 @@ const markSynced=d=>({...d,__lastSyncedAt:syncTime(d)||Date.now()});
 const remoteTime=(d,updatedAt)=>syncTime(d)||(updatedAt?Date.parse(updatedAt):0)||0;
 
 /* ── Helpers ───────────────────────────────── */
-const SEC_C={"Verse":"#3b82f6","Hook":"#f59e0b","Chorus":"#f59e0b","Bridge":"#a855f7","Outro":"#22c55e","Intro":"#22c55e"};
+const SEC_C={"Verse":"#4af0a0","Hook":"#e8a840","Chorus":"#e8a840","Bridge":"#7ab8c8","Outro":"#c88868","Intro":"#98b870"};
 function getSecColor(l){const m=l.match(/^\[(.+?)\]/);if(!m)return null;for(const k of Object.keys(SEC_C)){if(m[1].toLowerCase().startsWith(k.toLowerCase()))return SEC_C[k];}return"#7a7e8e";}
 function getSecLabel(l){const m=l.match(/^\[(.+?)\]/);return m?m[1]:null;}
+function buildSecMap(ls){const m=new Array(ls.length).fill(null);let c=null;for(let i=0;i<ls.length;i++){const cc=getSecColor(ls[i]);if(cc)c=cc;if(ls[i].trim()===""&&(i+1>=ls.length||getSecColor(ls[i+1]||"")))c=null;m[i]=c;}return m;}
 const fmtT=s=>{if(!s||isNaN(s)||!isFinite(s))return"0:00";return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;};
 const fmtS=b=>b<1048576?(b/1024).toFixed(1)+"KB":(b/1048576).toFixed(1)+"MB";
 const ts=()=>{const n=new Date();return`${n.getHours()}:${String(n.getMinutes()).padStart(2,"0")}`;};
@@ -103,12 +104,15 @@ export default function MobileApp(){
   const[confirmReset,setConfirmReset]=useState(false);
   const[showTrashView,setShowTrashView]=useState(false);
   const[projPickerOpen,setProjPickerOpen]=useState(false);
+  const[projPickerVisible,setProjPickerVisible]=useState(false);
+  const[mobileCurrentLine,setMobileCurrentLine]=useState(0);
   const[editingName,setEditingName]=useState(null);const[editNameVal,setEditNameVal]=useState("");
   const[longPressMenu,setLongPressMenu]=useState(null);
   const[projectDrag,setProjectDrag]=useState(null);
   const longPressTimer=useRef(null);
 
   const saveTimer=useRef(null);const audioEl=useRef(null);const fileInput=useRef(null);
+  const mobileTextRef=useRef(null);const mobileGutterRef=useRef(null);
   const stateRef=useRef({});
   const localUpdatedAtRef=useRef(0);
   const localLastSyncedAtRef=useRef(0);
@@ -159,10 +163,17 @@ export default function MobileApp(){
   const allTags=[...new Set(cards.filter(c=>c.projId===activeProj).flatMap(c=>c.tags))];
   const filteredCards=cards.filter(c=>c.projId===activeProj&&(tagFilter==="all"||c.tags.includes(tagFilter)));
   const sections=[];curText.split("\n").forEach(l=>{const lb=getSecLabel(l);if(lb)sections.push({label:lb,color:getSecColor(l)});});
+  const mobileLines=curText.split("\n");
+  const mobileSecMap=buildSecMap(mobileLines);
+  const mobileLineHeight=32;
+  let mobileSectionLine=0;
 
   useEffect(()=>{projectDragRef.current=projectDrag;},[projectDrag]);
+  const syncMobileEditor=()=>{const el=mobileTextRef.current;if(!el)return;if(mobileGutterRef.current)mobileGutterRef.current.scrollTop=el.scrollTop;const pos=el.selectionStart||0;setMobileCurrentLine(curText.substring(0,pos).split("\n").length-1);};
 
-  const switchProject=id=>{setActiveProj(id);setTagFilter("all");setProjPickerOpen(false);doSave({activeProj:id});};
+  useEffect(()=>{if(projPickerOpen)setProjPickerVisible(true);},[projPickerOpen]);
+  const closeProjectPicker=()=>{setProjPickerOpen(false);setLongPressMenu(null);};
+  const switchProject=id=>{setActiveProj(id);setTagFilter("all");closeProjectPicker();doSave({activeProj:id});};
   const addProject=()=>{if(!newProjTitle.trim())return;const id="proj_"+Date.now(),np=[...projects,{id,title:newProjTitle.trim()}];const nl={...lyrics,[id]:""};setProjects(np);setLyrics(nl);setActiveProj(id);setShowNewProj(false);setNewProjTitle("");doSave({projects:np,lyrics:nl,activeProj:id});};
   const addFolder=()=>{if(!newFolderTitle.trim())return;const nf=[...projectFolders,{id:"folder_"+Date.now(),title:newFolderTitle.trim(),projectIds:[],open:true,locked:false}];setProjectFolders(nf);setShowNewFolder(false);setNewFolderTitle("");doSave({projectFolders:nf});};
   const toggleFolderOpen=id=>{const nf=projectFolders.map(f=>f.id===id?{...f,open:f.open===false?true:false}:f);setProjectFolders(nf);doSave({projectFolders:nf});};
@@ -241,7 +252,7 @@ export default function MobileApp(){
       <div style={{padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
         <div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}>
           <button onClick={()=>swipeNav(-1)} style={{...btn,padding:4,color:allProjs.findIndex(p=>p.id===activeProj)>0?"#7a7e8e":"#2a2a35",flexShrink:0}}><ChevronLeft size={16}/></button>
-          <button onClick={()=>setProjPickerOpen(!projPickerOpen)} style={{...btn,gap:8,flex:1,minWidth:0}}>
+          <button onClick={()=>{if(projPickerOpen)closeProjectPicker();else setProjPickerOpen(true);}} style={{...btn,gap:8,flex:1,minWidth:0}}>
             <FileText size={16} color="#7a7e8e" style={{flexShrink:0}}/>
             <div style={{textAlign:"left",minWidth:0,flex:1}}>
               <div style={{fontSize:15,fontWeight:600,color:"#c8ccd8",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{curProject?.title||"無題"}</div>
@@ -257,9 +268,9 @@ export default function MobileApp(){
       </div>
 
       {/* ── Project Picker ── */}
-      {projPickerOpen&&(<div className="lw-motion-backdrop" onClick={()=>{setProjPickerOpen(false);setLongPressMenu(null);}} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
+      {projPickerVisible&&(<div className="lw-motion-backdrop" data-closing={!projPickerOpen} onAnimationEnd={()=>{if(!projPickerOpen)setProjPickerVisible(false);}} onClick={closeProjectPicker} onPointerMove={moveProjectDrag} onPointerUp={endProjectDrag} onPointerCancel={cancelProjectDrag} style={{position:"fixed",inset:0,zIndex:120,pointerEvents:"auto"}}>
       <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.28)"}}/>
-      <div className="lw-motion-drawer" onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="lw-motion-drawer" data-closing={!projPickerOpen} onClick={e=>e.stopPropagation()} style={{position:"absolute",top:56,bottom:"calc(62px + env(safe-area-inset-bottom, 0px))",left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#111116",border:"1px solid #3a3a4a",borderRadius:"0 0 16px 16px",padding:12,boxShadow:"0 20px 40px rgba(0,0,0,0.5)",boxSizing:"border-box",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",border:"1px solid #2a2a35",borderRadius:10,background:"#0a0a0a",marginBottom:10}}>
           <Search size={13} color="#7a7e8e"/>
           <input value={projectQuery} onChange={e=>setProjectQuery(e.target.value)} placeholder="検索..." style={{flex:1,minWidth:0,background:"transparent",border:"none",outline:"none",color:"#c8ccd8",fontFamily:ff,fontSize:14}}/>
@@ -338,8 +349,12 @@ export default function MobileApp(){
         {/* EDITOR TAB */}
         {tab==="editor"&&(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
           {sections.length>0&&(<div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>{sections.map((s,i)=>(<span key={i} style={{fontSize:11,fontFamily:mf,fontWeight:500,color:s.color,background:s.color+"18",border:`1px solid ${s.color}40`,borderRadius:6,padding:"4px 12px"}}>{s.label}</span>))}</div>)}
-          <div style={{flex:1,overflow:"auto",position:"relative"}}>
-            <textarea value={curText} onChange={e=>setCurText(e.target.value)} onSelect={checkSelection} onTouchEnd={()=>setTimeout(checkSelection,200)} spellCheck={false} style={{width:"100%",height:"100%",fontFamily:ff,fontSize:16,lineHeight:2,letterSpacing:"0.02em",caretColor:"#4af0a0",background:"transparent",color:"#c8ccd8",border:"none",outline:"none",resize:"none",padding:"16px",boxSizing:"border-box"}}/>
+          <div style={{flex:1,overflow:"hidden",position:"relative",display:"flex"}}>
+            <div ref={mobileGutterRef} style={{flexShrink:0,overflowY:"hidden",paddingTop:16,paddingBottom:16,userSelect:"none",display:"flex",background:"#0a0a0a",borderRight:"1px solid #1a1a1a"}}>
+              <div style={{width:3,flexShrink:0}}>{mobileLines.map((l,i)=>(<div key={i} style={{height:mobileLineHeight,background:mobileSecMap[i]||"transparent",opacity:getSecLabel(l)?1:0.4}}/>))}</div>
+              <div style={{width:42}}>{mobileLines.map((l,i)=>{const label=getSecLabel(l),isSection=!!label,isActive=i===mobileCurrentLine,sc=getSecColor(l);if(isSection){mobileSectionLine=0;return <div key={i} style={{height:mobileLineHeight,lineHeight:mobileLineHeight+"px",fontSize:9,fontFamily:mf,textAlign:"right",paddingRight:10,color:sc,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</div>;}mobileSectionLine+=1;return <div key={i} style={{height:mobileLineHeight,lineHeight:mobileLineHeight+"px",fontSize:11,fontFamily:mf,textAlign:"right",paddingRight:10,color:isActive?"#7a7e8e":"#3a3a4a",fontWeight:400}}>{mobileSectionLine}</div>;})}</div>
+            </div>
+            <textarea ref={mobileTextRef} value={curText} onChange={e=>{setCurText(e.target.value);setTimeout(syncMobileEditor,0);}} onScroll={syncMobileEditor} onClick={syncMobileEditor} onKeyUp={syncMobileEditor} onSelect={e=>{syncMobileEditor();checkSelection(e);}} onTouchEnd={()=>setTimeout(()=>{syncMobileEditor();checkSelection();},200)} spellCheck={false} wrap="off" style={{flex:1,minWidth:0,height:"100%",fontFamily:ff,fontSize:16,lineHeight:mobileLineHeight+"px",letterSpacing:"0.02em",caretColor:"#4af0a0",background:"transparent",color:"#c8ccd8",border:"none",outline:"none",resize:"none",padding:"16px 16px 16px 8px",boxSizing:"border-box",overflow:"auto",whiteSpace:"pre"}}/>
           </div>
           {/* Selection toolbar */}
           {showSelBar&&selText&&(<div style={{position:"absolute",bottom:140,left:16,right:16,background:"#111116",border:"1px solid #4a4e5e",borderRadius:12,padding:"8px",display:"flex",justifyContent:"center",gap:4,zIndex:20,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>

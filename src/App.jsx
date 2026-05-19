@@ -233,7 +233,7 @@ function LyricEditor({ text, setText, onContextMenu }) {
   const [cl, setCl] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [caret, setCaret] = useState({ top: 16, left: 8 });
-  const ls = text.split("\n"), sm = buildSecMap(ls), LH = 28;
+  const ls = text.split("\n"), sm = buildSecMap(ls), LH = 28, caretH = LH;
   let sectionLine = 0;
   const updateCaret = () => {
     if (!ta.current) return;
@@ -256,7 +256,7 @@ function LyricEditor({ text, setText, onContextMenu }) {
         <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l); if (iS) { sectionLine = 0; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>); } sectionLine += 1; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400 }}>{sectionLine}</div>); })}</div>
       </div>
       <div style={{ flex: 1, position: "relative" }}>
-        {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: LH - 4, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
+        {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
         <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
@@ -1246,8 +1246,8 @@ export default function LyricWorkspace() {
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
 
         {/* LEFT SIDEBAR */}
-        <div className="lw-motion-sidebar" data-open={sidebarOpen ? "true" : "false"} style={{ width: sidebarOpen ? 220 : 0, flexShrink: 0, borderRight: sidebarOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#111116", display: "flex", flexDirection: "column", overflow: "hidden", pointerEvents: sidebarOpen ? "auto" : "none" }}>
-          <div className="lw-motion-sidebar-inner" style={{ width: 220, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="lw-motion-sidebar" data-open={sidebarOpen ? "true" : "false"} style={{ width: sidebarOpen ? 220 : 0, flexShrink: 0, borderRight: sidebarOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#111116", display: "flex", flexDirection: "column", overflow: sidebarOpen ? "visible" : "hidden", pointerEvents: sidebarOpen ? "auto" : "none" }}>
+          <div className="lw-motion-sidebar-inner" style={{ width: 220, height: "100%", display: "flex", flexDirection: "column", overflow: "visible" }}>
             <div style={{ padding: 12, flex: 1, overflowY: "auto" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 2, background: "#18181f", border: "1px solid #2a2a35", marginBottom: 16 }}><Search size={13} color="#7a7e8e" /><input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="// search..." style={{ background: "transparent", border: "none", outline: "none", fontSize: 12, color: "#c8ccd8", width: "100%", fontFamily: ff }} />{searchQuery && <button onClick={() => setSearchQuery("")} style={{ ...btn, color: "#4a4e5e" }}><XIcon size={11} /></button>}</div>
 

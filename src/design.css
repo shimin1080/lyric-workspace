@@ -50,6 +50,12 @@ body::before {
   color: var(--sh-text);
 }
 
+textarea::selection,
+input::selection {
+  background: rgba(74, 240, 160, 0.28);
+  color: var(--sh-text);
+}
+
 button,
 input,
 textarea,
@@ -180,6 +186,14 @@ select:focus {
 .lw-motion-drawer {
   animation: lwDrawerIn 240ms var(--lw-motion) both;
   will-change: transform, opacity;
+}
+
+.lw-motion-backdrop[data-closing="true"] {
+  animation: lwFadeIn 180ms var(--lw-motion) reverse both;
+}
+
+.lw-motion-drawer[data-closing="true"] {
+  animation: lwDrawerIn 220ms var(--lw-motion) reverse both;
 }
 
 @media (prefers-reduced-motion: reduce) {
