@@ -53,9 +53,15 @@ const remoteTime = (data, updatedAt) => syncTime(data) || (updatedAt ? Date.pars
 
 /* ── Helpers ───────────────────────────────── */
 const SEC_C = { Verse: "#4af0a0", Hook: "#e8a840", Chorus: "#e8a840", Bridge: "#7ab8c8", Outro: "#c88868", Intro: "#98b870" };
-function getSecColor(l) { const m = l.match(/^\[(.+?)\]/); if (!m) return null; for (const k of Object.keys(SEC_C)) { if (m[1].toLowerCase().startsWith(k.toLowerCase())) return SEC_C[k]; } return "#7a7e8e"; }
+const sectionColorKey = (label = "") => {
+  const t = String(label).trim().toLowerCase();
+  for (const k of Object.keys(SEC_C)) if (t.startsWith(k.toLowerCase())) return k;
+  return t || "Section";
+};
+const normalizeSectionColors = (colors = {}) => ({ ...SEC_C, ...colors });
+function getSecColor(l, colors = SEC_C) { const label = getSecLabel(l); if (!label) return null; const key = sectionColorKey(label); const palette = normalizeSectionColors(colors); return palette[key] || "#7a7e8e"; }
 function getSecLabel(l) { const m = l.match(/^\[(.+?)\]/); return m ? m[1] : null; }
-function buildSecMap(ls) { const m = new Array(ls.length).fill(null); let c = null; for (let i = 0; i < ls.length; i++) { const cc = getSecColor(ls[i]); if (cc) c = cc; if (ls[i].trim() === "" && (i + 1 >= ls.length || getSecColor(ls[i + 1] || ""))) c = null; m[i] = c; } return m; }
+function buildSecMap(ls, colors = SEC_C) { const m = new Array(ls.length).fill(null); let c = null; for (let i = 0; i < ls.length; i++) { const cc = getSecColor(ls[i], colors); if (cc) c = cc; if (ls[i].trim() === "" && (i + 1 >= ls.length || getSecColor(ls[i + 1] || "", colors))) c = null; m[i] = c; } return m; }
 const fmtT = (s) => { if (!s || isNaN(s) || !isFinite(s)) return "0:00"; return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); };
 const fmtS = (b) => b < 1048576 ? (b / 1024).toFixed(1) + "KB" : (b / 1048576).toFixed(1) + "MB";
 const ts = () => { const n = new Date(); return n.getHours() + ":" + String(n.getMinutes()).padStart(2, "0"); };
@@ -236,12 +242,12 @@ const ff = "'Courier New', 'JetBrains Mono', ui-monospace, Menlo, monospace";
 const mf = ff;
 
 /* ── Sub-components ────────────────────────── */
-function LyricEditor({ text, setText, onContextMenu }) {
+function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [caret, setCaret] = useState({ top: 16, left: 8 });
-  const ls = text.split("\n"), sm = buildSecMap(ls), LH = 28, caretH = LH;
+  const ls = text.split("\n"), sm = buildSecMap(ls, sectionColors), LH = 28, caretH = LH;
   let sectionLine = 0;
   const updateCaret = () => {
     if (!ta.current) return;
@@ -261,7 +267,7 @@ function LyricEditor({ text, setText, onContextMenu }) {
     <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
       <div ref={gut} style={{ flexShrink: 0, overflowY: "hidden", paddingTop: 16, paddingBottom: 16, userSelect: "none", display: "flex" }}>
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
-        <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l); if (iS) { sectionLine = 0; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>); } sectionLine += 1; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400 }}>{sectionLine}</div>); })}</div>
+        <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors); if (iS) { sectionLine = 0; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>); } sectionLine += 1; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400 }}>{sectionLine}</div>); })}</div>
       </div>
       <div style={{ flex: 1, position: "relative" }}>
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
@@ -271,11 +277,11 @@ function LyricEditor({ text, setText, onContextMenu }) {
   );
 }
 
-function SectionNav({ text }) {
+function SectionNav({ text, sectionColors = SEC_C, onColorChange }) {
   const s = [];
-  text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, color: getSecColor(l) }); });
+  text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
   if (!s.length) return null;
-  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", marginRight: 4 }}>SECTIONS</span>{s.map((x, i) => (<span key={i} style={{ fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + "14", border: "1px solid " + x.color + "40", borderRadius: 2, padding: "2px 8px" }}>{x.label}</span>))}</div>);
+  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + "14", border: "1px solid " + x.color + "40", borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}><input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}</label>))}</div>);
 }
 
 function ScrapCard({ card, onDelete }) {
@@ -312,11 +318,12 @@ function ScrapCard({ card, onDelete }) {
   );
 }
 
-function EditableName({ name, onSave, style: { fontSize: fs = 11, ...rest } = {} }) {
+function EditableName({ name, onSave, onClick, style: { fontSize: fs = 11, ...rest } = {} }) {
   const [editing, setEditing] = useState(false);
   const [v, setV] = useState(name);
-  if (editing) return <input autoFocus value={v} onChange={(e) => setV(e.target.value)} onBlur={() => { onSave(v.trim() || name); setEditing(false); }} onKeyDown={(e) => { if (e.key === "Enter") { onSave(v.trim() || name); setEditing(false); } if (e.key === "Escape") setEditing(false); }} style={{ background: "#0a0a0a", border: "1px solid #4af0a040", borderRadius: 3, padding: "1px 4px", fontSize: fs, color: "#c8ccd8", outline: "none", fontFamily: ff, width: "100%", boxSizing: "border-box", ...rest }} />;
-  return <span onDoubleClick={() => { setV(name); setEditing(true); }} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "default", fontSize: fs, ...rest }} title="ダブルクリックで名前変更">{name}</span>;
+  const clickTimer = useRef(null);
+  if (editing) return <input autoFocus value={v} onClick={(e) => e.stopPropagation()} onChange={(e) => setV(e.target.value)} onBlur={() => { onSave(v.trim() || name); setEditing(false); }} onKeyDown={(e) => { if (e.key === "Enter") { onSave(v.trim() || name); setEditing(false); } if (e.key === "Escape") setEditing(false); }} style={{ background: "#0a0a0a", border: "1px solid #4af0a040", borderRadius: 3, padding: "1px 4px", fontSize: fs, color: "#c8ccd8", outline: "none", fontFamily: ff, width: "100%", boxSizing: "border-box", ...rest }} />;
+  return <span onClick={(e) => { if (!onClick) return; e.stopPropagation(); if (clickTimer.current) clearTimeout(clickTimer.current); clickTimer.current = setTimeout(() => { onClick(e); clickTimer.current = null; }, 180); }} onDoubleClick={(e) => { e.stopPropagation(); if (clickTimer.current) clearTimeout(clickTimer.current); setV(name); setEditing(true); }} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClick ? "pointer" : "default", fontSize: fs, ...rest }} title="ダブルクリックで名前変更">{name}</span>;
 }
 
 /* ══════════════════════════════════════════════
@@ -342,6 +349,7 @@ export default function LyricWorkspace() {
   const [memo, setMemo] = useState({});
   const [drafts, setDrafts] = useState({});
   const [activeDrafts, setActiveDrafts] = useState({});
+  const [sectionColors, setSectionColors] = useState(SEC_C);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrapsOpen, setScrapsOpen] = useState(true);
@@ -402,7 +410,7 @@ export default function LyricWorkspace() {
   const pulledUserRef = useRef(null);
 
   // Always keep stateRef up to date for async push
-  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
+  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -420,6 +428,7 @@ export default function LyricWorkspace() {
       if (data.memo) setMemo(data.memo);
       if (data.drafts) setDrafts(data.drafts);
       if (data.activeDrafts) setActiveDrafts(data.activeDrafts);
+      if (data.sectionColors) setSectionColors(normalizeSectionColors(data.sectionColors));
       if (data.trash) setTrash(data.trash);
       if (data.projectList) setProjectList(data.projectList);
       if (data.projectFolders) setProjectFolders(data.projectFolders);
@@ -490,7 +499,7 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   useEffect(() => {
     pulledUserRef.current = null;
@@ -529,6 +538,7 @@ export default function LyricWorkspace() {
           if (d.memo) setMemo(d.memo);
           if (d.drafts) setDrafts(d.drafts);
           if (d.activeDrafts) setActiveDrafts(d.activeDrafts);
+          if (d.sectionColors) setSectionColors(normalizeSectionColors(d.sectionColors));
           if (d.trash) { const now = Date.now(); setTrash(d.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000)); }
           if (d.projectList) setProjectList(d.projectList);
           if (d.projectFolders) setProjectFolders(d.projectFolders);
@@ -559,7 +569,7 @@ export default function LyricWorkspace() {
     saveTimerRef.current = setTimeout(async () => {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
-      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
       d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
@@ -587,6 +597,11 @@ export default function LyricWorkspace() {
     const nl = { ...lyrics, [activeProj]: t };
     setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
     doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+  };
+  const updateSectionColor = (key, color) => {
+    const next = normalizeSectionColors({ ...sectionColors, [key]: color });
+    setSectionColors(next);
+    doSave({ sectionColors: next });
   };
   const curProject = projects.find((p) => p.id === activeProj) || projectList.find((p) => p.id === activeProj);
   const curMemo = memo[activeProj] || "";
@@ -1040,7 +1055,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -1082,7 +1097,7 @@ export default function LyricWorkspace() {
       await deleteAudio(prefix + track.id); delete audioCacheRef.current[track.id]; await removeAudio(track.id);
     }
     const nt = trash.filter(t => t.id !== trashId); setTrash(nt);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash: nt, projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash: nt, projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1097,7 +1112,7 @@ export default function LyricWorkspace() {
       }
     }
     setTrash([]);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash: [], projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash: [], projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1299,7 +1314,7 @@ export default function LyricWorkspace() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderBottom: "1px solid #2a2a35", background: "#0a0a0d", flexShrink: 0, zIndex: 30 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ ...btn, padding: 6, borderRadius: 2, color: "#7a7e8e", border: "1px solid transparent" }}>{sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 13, fontWeight: 700, color: "#4af0a0", letterSpacing: "0.15em", textTransform: "uppercase" }}>// LYRIC WORKSPACE</span><span style={{ fontSize: 11, color: "#4a4e5e" }}>/</span><span style={{ fontSize: 13, fontWeight: 700, color: "#c8ccd8", letterSpacing: "0.06em", textTransform: "uppercase" }}>{curProject?.title || "untitled"}</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span style={{ fontSize: 13, fontWeight: 700, color: "#4af0a0", letterSpacing: "0.15em", textTransform: "uppercase" }}>// LYRIC WORKSPACE</span><span style={{ fontSize: 11, color: "#4a4e5e" }}>/</span><span style={{ fontSize: 13, fontWeight: 700, color: "#c8ccd8", letterSpacing: "0.06em" }}>{curProject?.title || "untitled"}</span></div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <button onClick={() => setScrapsOpen(!scrapsOpen)} style={{ ...btn, padding: 8, borderRadius: 2, background: scrapsOpen ? "#1a5040" : "transparent", color: scrapsOpen ? "#4af0a0" : "#7a7e8e", border: scrapsOpen ? "1px solid #2a9060" : "1px solid transparent" }}><Layers size={15} /></button>
@@ -1416,7 +1431,7 @@ export default function LyricWorkspace() {
                                 onDragEnd={() => setDragProjId(null)}
                                 style={{ display: "flex", alignItems: "center", marginBottom: 2, position: "relative", opacity: dragProjId === p.id ? 0.32 : 1, borderRadius: 2, ...rowMotion }}
                               >
-		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 44px 6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span onClick={(e) => e.stopPropagation()} style={{ flex: 1, minWidth: 0, display: "flex" }}><EditableName name={p.title} onSave={(n) => renameProject(p.id, n)} style={{ fontSize: 12, flex: 1 }} /></span></button>
+		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 44px 6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span style={{ flex: 1, minWidth: 0, display: "flex" }}><EditableName name={p.title} onSave={(n) => renameProject(p.id, n)} onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ fontSize: 12, flex: 1 }} /></span></button>
                               <div style={{ position: "absolute", right: 4, display: "flex", gap: 1, alignItems: "center" }}>
                                 <button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); toggleLock(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: p.locked ? "#4af0a0" : "#3a3a4a" }}>{p.locked ? <Lock size={9} /> : <Unlock size={9} />}</button>
                                 {allProjects.length > 1 && !p.locked && (<button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: "#4a4e5e", opacity: 0.4 }}><XIcon size={10} /></button>)}
@@ -1459,9 +1474,9 @@ export default function LyricWorkspace() {
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} />
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "#4a4e5e", marginRight: 4 }}>DRAFTS</span>
+            <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
             {draftList.map((d, i) => {
               const active = d.id === activeDraft.id;
               const color = active ? "#4af0a0" : "#7a7e8e";
@@ -1474,7 +1489,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} />
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
