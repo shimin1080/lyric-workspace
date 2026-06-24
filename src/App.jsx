@@ -77,6 +77,13 @@ const getDragPayload = (e) => {
   const text = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain") || "{}";
   try { return JSON.parse(text); } catch (err) { return {}; }
 };
+const DRAFT_LABELS = ["第一案", "第二案", "第三案", "第四案", "第五案", "第六案", "第七案", "第八案", "第九案", "第十案"];
+const draftTitle = (idx) => DRAFT_LABELS[idx] || `第${idx + 1}案`;
+const makeDraft = (idx, text = "") => ({ id: "draft_" + Date.now() + "_" + idx, title: draftTitle(idx), text });
+const projectDrafts = (drafts, projectId, text = "") => {
+  const list = drafts?.[projectId];
+  return Array.isArray(list) && list.length ? list : [{ id: "draft_default", title: draftTitle(0), text }];
+};
 
 function dataUrlToArrayBuffer(dataUrl) {
   const b64 = String(dataUrl || "").split(",")[1] || "";
@@ -333,6 +340,8 @@ export default function LyricWorkspace() {
   const [recLib, setRecLib] = useState([]);
   const [activeTrackId, setActiveTrackId] = useState(null);
   const [memo, setMemo] = useState({});
+  const [drafts, setDrafts] = useState({});
+  const [activeDrafts, setActiveDrafts] = useState({});
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrapsOpen, setScrapsOpen] = useState(true);
@@ -393,7 +402,7 @@ export default function LyricWorkspace() {
   const pulledUserRef = useRef(null);
 
   // Always keep stateRef up to date for async push
-  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
+  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -409,6 +418,8 @@ export default function LyricWorkspace() {
       if (data.cards) setCards(data.cards);
       if (data.activeProj) setActiveProj(data.activeProj);
       if (data.memo) setMemo(data.memo);
+      if (data.drafts) setDrafts(data.drafts);
+      if (data.activeDrafts) setActiveDrafts(data.activeDrafts);
       if (data.trash) setTrash(data.trash);
       if (data.projectList) setProjectList(data.projectList);
       if (data.projectFolders) setProjectFolders(data.projectFolders);
@@ -479,7 +490,7 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   useEffect(() => {
     pulledUserRef.current = null;
@@ -516,6 +527,8 @@ export default function LyricWorkspace() {
           if (d.cards) setCards(d.cards);
           if (d.activeProj) setActiveProj(d.activeProj);
           if (d.memo) setMemo(d.memo);
+          if (d.drafts) setDrafts(d.drafts);
+          if (d.activeDrafts) setActiveDrafts(d.activeDrafts);
           if (d.trash) { const now = Date.now(); setTrash(d.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000)); }
           if (d.projectList) setProjectList(d.projectList);
           if (d.projectFolders) setProjectFolders(d.projectFolders);
@@ -546,7 +559,7 @@ export default function LyricWorkspace() {
     saveTimerRef.current = setTimeout(async () => {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
-      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
       d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
@@ -562,8 +575,19 @@ export default function LyricWorkspace() {
     }, 800);
   }, [user, push]);
 
-  const curText = lyrics[activeProj] || "";
-  const setCurText = (t) => { const nl = { ...lyrics, [activeProj]: t }; setLyrics(nl); doSave({ lyrics: nl }); };
+  const draftList = projectDrafts(drafts, activeProj, lyrics[activeProj] || "");
+  const activeDraftId = activeDrafts[activeProj] || draftList[0]?.id;
+  const activeDraft = draftList.find((d) => d.id === activeDraftId) || draftList[0];
+  const curText = activeDraft?.text ?? lyrics[activeProj] ?? "";
+  const setCurText = (t) => {
+    const base = drafts[activeProj]?.length ? drafts[activeProj] : draftList;
+    const list = base.map((d) => d.id === activeDraft.id ? { ...d, text: t } : d);
+    const nd = { ...drafts, [activeProj]: list };
+    const nad = { ...activeDrafts, [activeProj]: activeDraft.id };
+    const nl = { ...lyrics, [activeProj]: t };
+    setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
+    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+  };
   const curProject = projects.find((p) => p.id === activeProj) || projectList.find((p) => p.id === activeProj);
   const curMemo = memo[activeProj] || "";
   const setCurMemo = (t) => { const nm = { ...memo, [activeProj]: t }; setMemo(nm); doSave({ memo: nm }); };
@@ -573,7 +597,7 @@ export default function LyricWorkspace() {
   const allProjects = [...projects, ...projectList.filter((p) => !projects.some((x) => x.id === p.id))];
   const folderProjectIds = new Set(projectFolders.flatMap((f) => f.projectIds || []));
   const q = norm(searchQuery.trim());
-  const projectMatchesSearch = (p) => !q || norm(p.title).includes(q) || norm(lyrics[p.id]).includes(q) || norm(memo[p.id]).includes(q);
+  const projectMatchesSearch = (p) => !q || norm(p.title).includes(q) || norm(lyrics[p.id]).includes(q) || norm((drafts[p.id] || []).map((d) => d.text).join("\n")).includes(q) || norm(memo[p.id]).includes(q);
   const visibleRootProjects = allProjects.filter((p) => !folderProjectIds.has(p.id) && projectMatchesSearch(p));
   const visibleAudioLib = audioLib.filter((t) => !q || norm(t.name).includes(q));
   const visibleRecLib = recLib.filter((t) => !q || norm(t.name).includes(q));
@@ -584,8 +608,45 @@ export default function LyricWorkspace() {
   }).filter((f) => f.isVisible);
 
   // Project CRUD
-  const switchProject = (id) => { setActiveProj(id); setTagFilter("all"); doSave({ activeProj: id }); };
-  const addProject = () => { if (!newProjTitle.trim()) return; const id = "proj_" + Date.now(); const np = [...projects, { id, title: newProjTitle.trim(), emoji: "🎵" }]; const nl = { ...lyrics, [id]: "" }; setProjects(np); setLyrics(nl); setActiveProj(id); setShowNewProj(false); setNewProjTitle(""); doSave({ projects: np, lyrics: nl, activeProj: id }); };
+  const switchProject = (id) => {
+    const list = projectDrafts(drafts, id, lyrics[id] || "");
+    const draftId = activeDrafts[id] || list[0]?.id;
+    const draft = list.find((d) => d.id === draftId) || list[0];
+    const nl = { ...lyrics, [id]: draft?.text || "" };
+    setActiveProj(id); setTagFilter("all"); setLyrics(nl);
+    doSave({ activeProj: id, lyrics: nl });
+  };
+  const addProject = () => { if (!newProjTitle.trim()) return; const id = "proj_" + Date.now(); const initialDraft = makeDraft(0, ""); const np = [...projects, { id, title: newProjTitle.trim(), emoji: "🎵" }]; const nl = { ...lyrics, [id]: "" }; const nd = { ...drafts, [id]: [initialDraft] }; const nad = { ...activeDrafts, [id]: initialDraft.id }; setProjects(np); setLyrics(nl); setDrafts(nd); setActiveDrafts(nad); setActiveProj(id); setShowNewProj(false); setNewProjTitle(""); doSave({ projects: np, lyrics: nl, drafts: nd, activeDrafts: nad, activeProj: id }); };
+  const selectDraft = (id) => {
+    const d = draftList.find((x) => x.id === id);
+    if (!d) return;
+    const nd = drafts[activeProj]?.length ? drafts : { ...drafts, [activeProj]: draftList };
+    const nad = { ...activeDrafts, [activeProj]: id };
+    const nl = { ...lyrics, [activeProj]: d.text || "" };
+    setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
+    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+  };
+  const addDraft = () => {
+    const base = drafts[activeProj]?.length ? drafts[activeProj] : draftList;
+    const next = makeDraft(base.length, curText);
+    const list = [...base, next];
+    const nd = { ...drafts, [activeProj]: list };
+    const nad = { ...activeDrafts, [activeProj]: next.id };
+    setDrafts(nd); setActiveDrafts(nad);
+    doSave({ drafts: nd, activeDrafts: nad });
+  };
+  const deleteDraft = (id) => {
+    const base = drafts[activeProj]?.length ? drafts[activeProj] : draftList;
+    if (base.length <= 1) return;
+    const removedIdx = base.findIndex((d) => d.id === id);
+    const list = base.filter((d) => d.id !== id);
+    const next = id === activeDraft.id ? list[Math.max(0, removedIdx - 1)] || list[0] : activeDraft;
+    const nd = { ...drafts, [activeProj]: list };
+    const nad = { ...activeDrafts, [activeProj]: next.id };
+    const nl = { ...lyrics, [activeProj]: next.text || "" };
+    setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
+    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+  };
   const addFolder = () => { if (!newFolderTitle.trim()) return; const nf = [...projectFolders, { id: "folder_" + Date.now(), title: newFolderTitle.trim(), projectIds: [], open: true, locked: false }]; setProjectFolders(nf); setShowNewFolder(false); setNewFolderTitle(""); doSave({ projectFolders: nf }); };
   const renameFolder = (id, title) => { const nf = projectFolders.map((f) => f.id === id ? { ...f, title } : f); setProjectFolders(nf); doSave({ projectFolders: nf }); };
   const toggleFolderLock = (id) => { const nf = projectFolders.map((f) => f.id === id ? { ...f, locked: !f.locked } : f); setProjectFolders(nf); doSave({ projectFolders: nf }); };
@@ -954,7 +1015,7 @@ export default function LyricWorkspace() {
     const top = Math.min(Math.max(72, rect.top - 4), Math.max(72, window.innerHeight - 280));
     setFolderFlyout((cur) => cur?.id === f.id ? null : { id: f.id, left, top });
   };
-  const deleteProject = (id) => { const inProjects = projects.find(p => p.id === id); const inList = projectList.find(p => p.id === id); if (allProjects.length <= 1) return; const proj = inProjects || inList; if (!proj || proj.locked) return; const trashItem = { id: "tr_" + Date.now(), type: "project", data: { project: proj, lyrics: lyrics[id], cards: cards.filter(c => c.projId === id), memo: memo[id] }, deletedAt: Date.now() }; const nt = [...trash, trashItem]; const np = projects.filter((p) => p.id !== id); const npl = projectList.filter((p) => p.id !== id); const nf = projectFolders.map((f) => ({ ...f, projectIds: (f.projectIds || []).filter((pid) => pid !== id) })); const nl = { ...lyrics }; delete nl[id]; const nc = cards.filter((c) => c.projId !== id); const na = id === activeProj ? (np[0] || npl[0])?.id || "proj_1" : activeProj; const nm = { ...memo }; delete nm[id]; setTrash(nt); setProjects(np); setProjectList(npl); setProjectFolders(nf); setLyrics(nl); setCards(nc); setActiveProj(na); setMemo(nm); doSave({ trash: nt, projects: np, projectList: npl, projectFolders: nf, lyrics: nl, cards: nc, activeProj: na, memo: nm }); };
+  const deleteProject = (id) => { const inProjects = projects.find(p => p.id === id); const inList = projectList.find(p => p.id === id); if (allProjects.length <= 1) return; const proj = inProjects || inList; if (!proj || proj.locked) return; const trashItem = { id: "tr_" + Date.now(), type: "project", data: { project: proj, lyrics: lyrics[id], drafts: drafts[id], activeDraftId: activeDrafts[id], cards: cards.filter(c => c.projId === id), memo: memo[id] }, deletedAt: Date.now() }; const nt = [...trash, trashItem]; const np = projects.filter((p) => p.id !== id); const npl = projectList.filter((p) => p.id !== id); const nf = projectFolders.map((f) => ({ ...f, projectIds: (f.projectIds || []).filter((pid) => pid !== id) })); const nl = { ...lyrics }; delete nl[id]; const nd = { ...drafts }; delete nd[id]; const nad = { ...activeDrafts }; delete nad[id]; const nc = cards.filter((c) => c.projId !== id); const na = id === activeProj ? (np[0] || npl[0])?.id || "proj_1" : activeProj; const nm = { ...memo }; delete nm[id]; setTrash(nt); setProjects(np); setProjectList(npl); setProjectFolders(nf); setLyrics(nl); setDrafts(nd); setActiveDrafts(nad); setCards(nc); setActiveProj(na); setMemo(nm); doSave({ trash: nt, projects: np, projectList: npl, projectFolders: nf, lyrics: nl, drafts: nd, activeDrafts: nad, cards: nc, activeProj: na, memo: nm }); };
   const renameProject = (id, n) => { const np = projects.map((p) => p.id === id ? { ...p, title: n } : p); const npl = projectList.map((p) => p.id === id ? { ...p, title: n } : p); setProjects(np); setProjectList(npl); doSave({ projects: np, projectList: npl }); };
   const toggleLock = (id) => { const np = projects.map(p => p.id === id ? { ...p, locked: !p.locked } : p); const npl = projectList.map(p => p.id === id ? { ...p, locked: !p.locked } : p); setProjects(np); setProjectList(npl); doSave({ projects: np, projectList: npl }); };
   // Drag reorder
@@ -979,7 +1040,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -999,10 +1060,12 @@ export default function LyricWorkspace() {
       const d = item.data;
       const np = [...projects, d.project];
       const nl = { ...lyrics, [d.project.id]: d.lyrics || "" };
+      const nd = { ...drafts, [d.project.id]: d.drafts || projectDrafts({}, d.project.id, d.lyrics || "") };
+      const nad = { ...activeDrafts, [d.project.id]: d.activeDraftId || nd[d.project.id][0]?.id };
       const nc = [...cards, ...(d.cards || [])];
       const nm = { ...memo, [d.project.id]: d.memo || "" };
-      setProjects(np); setLyrics(nl); setCards(nc); setMemo(nm); setTrash(nt);
-      doSave({ trash: nt, projects: np, lyrics: nl, cards: nc, memo: nm });
+      setProjects(np); setLyrics(nl); setDrafts(nd); setActiveDrafts(nad); setCards(nc); setMemo(nm); setTrash(nt);
+      doSave({ trash: nt, projects: np, lyrics: nl, drafts: nd, activeDrafts: nad, cards: nc, memo: nm });
     } else {
       const track = item.data.track;
       if (item.type === "audio") { const nal = [...audioLib, track]; setAudioLib(nal); setTrash(nt); doSave({ trash: nt, audioLib: nal }); }
@@ -1019,7 +1082,7 @@ export default function LyricWorkspace() {
       await deleteAudio(prefix + track.id); delete audioCacheRef.current[track.id]; await removeAudio(track.id);
     }
     const nt = trash.filter(t => t.id !== trashId); setTrash(nt);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash: nt, projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash: nt, projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1034,7 +1097,7 @@ export default function LyricWorkspace() {
       }
     }
     setTrash([]);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, trash: [], projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, trash: [], projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1353,7 +1416,7 @@ export default function LyricWorkspace() {
                                 onDragEnd={() => setDragProjId(null)}
                                 style={{ display: "flex", alignItems: "center", marginBottom: 2, position: "relative", opacity: dragProjId === p.id ? 0.32 : 1, borderRadius: 2, ...rowMotion }}
                               >
-		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</span></button>
+		                            <button onClick={() => { switchProject(p.id); setFolderFlyout(null); }} style={{ ...btn, width: "100%", gap: 8, padding: "6px 44px 6px 8px", borderRadius: 2, textAlign: "left", fontFamily: ff, fontSize: 12, background: activeProj === p.id ? "#2a2a35" : "transparent", color: activeProj === p.id ? "#c8ccd8" : "#7a7e8e", cursor: "pointer", ...rowMotion }}><span {...projectItemDragProps(p)} onClick={(e) => e.stopPropagation()} style={{ ...sidebarDragHandleStyle, cursor: dragProjId === p.id ? "grabbing" : "grab" }}><FileText size={12} /></span><span onClick={(e) => e.stopPropagation()} style={{ flex: 1, minWidth: 0, display: "flex" }}><EditableName name={p.title} onSave={(n) => renameProject(p.id, n)} style={{ fontSize: 12, flex: 1 }} /></span></button>
                               <div style={{ position: "absolute", right: 4, display: "flex", gap: 1, alignItems: "center" }}>
                                 <button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); toggleLock(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: p.locked ? "#4af0a0" : "#3a3a4a" }}>{p.locked ? <Lock size={9} /> : <Unlock size={9} />}</button>
                                 {allProjects.length > 1 && !p.locked && (<button data-no-drag="true" onMouseDown={stopActionDrag} onClick={(e) => { e.stopPropagation(); deleteProject(p.id); }} style={{ ...btn, padding: 3, borderRadius: 2, color: "#4a4e5e", opacity: 0.4 }}><XIcon size={10} /></button>)}
@@ -1397,6 +1460,19 @@ export default function LyricWorkspace() {
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           <SectionNav text={curText} />
+          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #1a1a1a", overflowX: "auto", background: "#0a0a0a" }}>
+            <span style={{ flexShrink: 0, fontSize: 9, color: "#4a4e5e", letterSpacing: "0.1em", fontWeight: 700 }}>DRAFTS</span>
+            {draftList.map((d) => {
+              const active = d.id === activeDraft.id;
+              return (
+                <button key={d.id} onClick={() => selectDraft(d.id)} style={{ ...btn, flexShrink: 0, gap: 5, height: 25, padding: "0 9px", borderRadius: 2, border: active ? "1px solid rgba(74,240,160,0.35)" : "1px solid #2a2a35", background: active ? "rgba(74,240,160,0.09)" : "#111116", color: active ? "#4af0a0" : "#7a7e8e", fontSize: 11, fontFamily: ff, fontWeight: active ? 700 : 500 }}>
+                  <span>{d.title}</span>
+                  {draftList.length > 1 && active && <span onClick={(e) => { e.stopPropagation(); deleteDraft(d.id); }} style={{ display: "grid", placeItems: "center", width: 14, height: 14, opacity: 0.75 }}><XIcon size={10} /></span>}
+                </button>
+              );
+            })}
+            <button onClick={addDraft} style={{ ...btn, flexShrink: 0, gap: 4, height: 25, padding: "0 9px", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: "#7a7e8e", fontSize: 11, fontFamily: ff }}><Plus size={11} />案を追加</button>
+          </div>
           <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} />
 
           {/* Context Menu */}
