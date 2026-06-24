@@ -59,8 +59,8 @@ const fmtT=s=>{if(!s||isNaN(s)||!isFinite(s))return"0:00";return`${Math.floor(s/
 const fmtS=b=>b<1048576?(b/1024).toFixed(1)+"KB":(b/1048576).toFixed(1)+"MB";
 const ts=()=>{const n=new Date();return`${n.getHours()}:${String(n.getMinutes()).padStart(2,"0")}`;};
 function findSection(text,sel){const idx=text.indexOf(sel);if(idx===-1)return"メモ";const before=text.substring(0,idx);const lines=text.split("\n");const li=before.split("\n").length-1;let sec="メモ";for(let i=0;i<=li&&i<lines.length;i++){const lb=getSecLabel(lines[i]);if(lb)sec=lb;}return sec;}
-const DRAFT_LABELS=["第一案","第二案","第三案","第四案","第五案","第六案","第七案","第八案","第九案","第十案"];
-const draftTitle=idx=>DRAFT_LABELS[idx]||`第${idx+1}案`;
+const draftTitle=idx=>`Draft ${idx+1}`;
+const draftDisplayTitle=(draft,idx)=>/^第.+案$/.test(String(draft?.title||""))?draftTitle(idx):(draft?.title||draftTitle(idx));
 const makeDraft=(idx,text="")=>({id:"draft_"+Date.now()+"_"+idx,title:draftTitle(idx),text});
 const projectDrafts=(drafts,projectId,text="")=>{const list=drafts?.[projectId];return Array.isArray(list)&&list.length?list:[{id:"draft_default",title:draftTitle(0),text}];};
 
@@ -362,9 +362,9 @@ export default function MobileApp(){
 
         {/* EDITOR TAB */}
         {tab==="editor"&&(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{padding:"8px 16px",display:"flex",gap:6,alignItems:"center",overflowX:"auto",flexShrink:0,borderBottom:"1px solid #1a1a1a",background:"#0a0a0a"}}>
-            {draftList.map(d=>{const active=d.id===activeDraft.id;return <button key={d.id} onClick={()=>selectDraft(d.id)} style={{...btn,flexShrink:0,gap:5,height:30,padding:"0 11px",borderRadius:7,border:active?"1px solid rgba(74,240,160,0.35)":"1px solid #2a2a35",background:active?"rgba(74,240,160,0.09)":"#111116",color:active?"#4af0a0":"#7a7e8e",fontSize:12,fontWeight:active?700:500,fontFamily:ff}}><span>{d.title}</span>{draftList.length>1&&active&&<span onClick={e=>{e.stopPropagation();deleteDraft(d.id);}} style={{display:"grid",placeItems:"center",width:15,height:15,opacity:.75}}><XIcon size={10}/></span>}</button>;})}
-            <button onClick={addDraft} style={{...btn,flexShrink:0,gap:4,height:30,padding:"0 11px",borderRadius:7,border:"1px solid #3a3a4a",background:"transparent",color:"#7a7e8e",fontSize:12,fontFamily:ff}}><Plus size={12}/>案を追加</button>
+          <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
+            {draftList.map((d,i)=>{const active=d.id===activeDraft.id;const color=active?"#4af0a0":"#7a7e8e";return <button key={d.id} onClick={()=>selectDraft(d.id)} style={{...btn,gap:5,fontSize:11,fontFamily:mf,fontWeight:500,color,background:color+"18",border:`1px solid ${color}40`,borderRadius:6,padding:"4px 12px"}}><span>{draftDisplayTitle(d,i)}</span>{draftList.length>1&&active&&<span onClick={e=>{e.stopPropagation();deleteDraft(d.id);}} style={{display:"grid",placeItems:"center",width:13,height:13,opacity:.75}}><XIcon size={9}/></span>}</button>;})}
+            <button onClick={addDraft} style={{...btn,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 12px"}}><Plus size={10}/>ADD DRAFT</button>
           </div>
           {sections.length>0&&(<div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>{sections.map((s,i)=>(<span key={i} style={{fontSize:11,fontFamily:mf,fontWeight:500,color:s.color,background:s.color+"18",border:`1px solid ${s.color}40`,borderRadius:6,padding:"4px 12px"}}>{s.label}</span>))}</div>)}
           <div style={{flex:1,overflow:"hidden",position:"relative",display:"flex"}}>

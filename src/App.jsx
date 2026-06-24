@@ -77,8 +77,8 @@ const getDragPayload = (e) => {
   const text = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain") || "{}";
   try { return JSON.parse(text); } catch (err) { return {}; }
 };
-const DRAFT_LABELS = ["第一案", "第二案", "第三案", "第四案", "第五案", "第六案", "第七案", "第八案", "第九案", "第十案"];
-const draftTitle = (idx) => DRAFT_LABELS[idx] || `第${idx + 1}案`;
+const draftTitle = (idx) => `Draft ${idx + 1}`;
+const draftDisplayTitle = (draft, idx) => /^第.+案$/.test(String(draft?.title || "")) ? draftTitle(idx) : (draft?.title || draftTitle(idx));
 const makeDraft = (idx, text = "") => ({ id: "draft_" + Date.now() + "_" + idx, title: draftTitle(idx), text });
 const projectDrafts = (drafts, projectId, text = "") => {
   const list = drafts?.[projectId];
@@ -1460,18 +1460,19 @@ export default function LyricWorkspace() {
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           <SectionNav text={curText} />
-          <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 6, padding: "7px 16px", borderBottom: "1px solid #1a1a1a", overflowX: "auto", background: "#0a0a0a" }}>
-            <span style={{ flexShrink: 0, fontSize: 9, color: "#4a4e5e", letterSpacing: "0.1em", fontWeight: 700 }}>DRAFTS</span>
-            {draftList.map((d) => {
+          <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
+            <span style={{ fontSize: 10, color: "#4a4e5e", marginRight: 4 }}>DRAFTS</span>
+            {draftList.map((d, i) => {
               const active = d.id === activeDraft.id;
+              const color = active ? "#4af0a0" : "#7a7e8e";
               return (
-                <button key={d.id} onClick={() => selectDraft(d.id)} style={{ ...btn, flexShrink: 0, gap: 5, height: 25, padding: "0 9px", borderRadius: 2, border: active ? "1px solid rgba(74,240,160,0.35)" : "1px solid #2a2a35", background: active ? "rgba(74,240,160,0.09)" : "#111116", color: active ? "#4af0a0" : "#7a7e8e", fontSize: 11, fontFamily: ff, fontWeight: active ? 700 : 500 }}>
-                  <span>{d.title}</span>
-                  {draftList.length > 1 && active && <span onClick={(e) => { e.stopPropagation(); deleteDraft(d.id); }} style={{ display: "grid", placeItems: "center", width: 14, height: 14, opacity: 0.75 }}><XIcon size={10} /></span>}
+                <button key={d.id} onClick={() => selectDraft(d.id)} style={{ ...btn, gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color, background: color + "14", border: "1px solid " + color + "40", borderRadius: 2, padding: "2px 8px" }}>
+                  <span>{draftDisplayTitle(d, i)}</span>
+                  {draftList.length > 1 && active && <span onClick={(e) => { e.stopPropagation(); deleteDraft(d.id); }} style={{ display: "grid", placeItems: "center", width: 12, height: 12, opacity: 0.75 }}><XIcon size={8} /></span>}
                 </button>
               );
             })}
-            <button onClick={addDraft} style={{ ...btn, flexShrink: 0, gap: 4, height: 25, padding: "0 9px", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: "#7a7e8e", fontSize: 11, fontFamily: ff }}><Plus size={11} />案を追加</button>
+            <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
           </div>
           <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} />
 
