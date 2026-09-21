@@ -124,7 +124,10 @@ export default function MobileApp(){
   const[sectionColors,setSectionColors]=useState(SEC_C);
   const[sectionVariants,setSectionVariants]=useState({});
   const[editorTheme,setEditorTheme]=useState({}); // { [projectId]: { text, bg } }
-  const[colorPicker,setColorPicker]=useState(null); // { kind:"section"|"text"|"bg", key, label, anchor }
+  const[colorPicker,setColorPicker]=useState(null);
+  const[takeSheetOpen,setTakeSheetOpen]=useState(false);
+  const[barsCollapsed,setBarsCollapsed]=useState(()=>{try{return localStorage.getItem("lyric-workspace-mobile-bars")==="collapsed";}catch(e){return false;}});
+  const toggleBars=()=>setBarsCollapsed(v=>{const n=!v;try{localStorage.setItem("lyric-workspace-mobile-bars",n?"collapsed":"open");}catch(e){}return n;}); // { kind:"section"|"text"|"bg", key, label, anchor }
   const[lineDrag,setLineDrag]=useState(null); // gutter drag: { from, end, section, to }
   const lineDragRef=useRef(null);const lineDragScrollRef=useRef(0);
   const[projectList,setProjectList]=useState([]);
@@ -338,6 +341,7 @@ export default function MobileApp(){
           </button>
           <button onClick={()=>swipeNav(1)} style={{...btn,padding:4,color:allProjs.findIndex(p=>p.id===activeProj)<allProjs.length-1?"#7a7e8e":"#2a2a35",flexShrink:0}}><ChevronRight size={16}/></button>
         </div>
+        {tab==="editor"&&<button title={barsCollapsed?"ツールバーを表示":"ツールバーをたたむ"} onClick={toggleBars} style={{...btn,width:32,height:36,borderRadius:10,background:"transparent",border:"1px solid "+(barsCollapsed?"#3a3a4a":"transparent"),color:barsCollapsed?"#7a7e8e":"#4a4e5e",flexShrink:0,marginLeft:4}}>{barsCollapsed?<ChevronDown size={16}/>:<ChevronUp size={16}/>}</button>}
         <button onClick={()=>setShowPlayer(!showPlayer)} style={{...btn,width:36,height:36,borderRadius:18,background:showPlayer?"#2a2a35":"#111116",border:"1px solid #3a3a4a",flexShrink:0,marginLeft:8}}>
           <MusicIcon size={16} color={hasSrc?"#4af0a0":"#4a4e5e"}/>
         </button>
@@ -424,30 +428,46 @@ export default function MobileApp(){
 
         {/* EDITOR TAB */}
         {tab==="editor"&&(<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-          <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
-            {sections.map((s,i)=>{const isActive=caretSection===s.label.trim();const open=colorPicker?.kind==="section"&&colorPicker.key===s.key;return <button key={i} onClick={e=>setColorPicker(open?null:{kind:"section",key:s.key,label:s.label,anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,fontSize:11,fontFamily:mf,fontWeight:500,color:s.color,background:s.color+(isActive||open?"2c":"18"),border:`1px solid ${s.color}${isActive||open?"80":"40"}`,borderRadius:6,padding:"4px 12px"}}>{s.label}</button>;})}
-            {sections.length===0&&<span style={{fontSize:10,color:"#4a4e5e"}}>[Verse] のように書くとセクションになります</span>}
-            <span style={{marginLeft:"auto",display:"inline-flex",gap:6}}>
-              <button title="文字色" onClick={e=>setColorPicker(colorPicker?.kind==="text"?null:{kind:"text",anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,padding:"4px 7px",borderRadius:6,border:"1px solid "+(colorPicker?.kind==="text"?"rgba(74,240,160,0.3)":"#3a3a4a"),color:curTheme.text}}><TextColorIcon size={13}/></button>
-              <button title="背景色" onClick={e=>setColorPicker(colorPicker?.kind==="bg"?null:{kind:"bg",anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,padding:"4px 7px",borderRadius:6,border:"1px solid "+(colorPicker?.kind==="bg"?"rgba(74,240,160,0.3)":"#3a3a4a"),color:curTheme.bg===THEME_DEFAULT.bg?"#7a7e8e":curTheme.bg}}><FillIcon size={13}/></button>
-            </span>
+          {/* Toolbar rows (single line each, horizontal scroll); hidden when collapsed */}
+          {!barsCollapsed&&(<>
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 16px",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
+            <div className="lw-hscroll" style={{flex:1,minWidth:0,display:"flex",gap:6,alignItems:"center",overflowX:"auto",overflowY:"hidden",whiteSpace:"nowrap",paddingBottom:2}}>
+              {sections.map((s,i)=>{const isActive=caretSection===s.label.trim();const open=colorPicker?.kind==="section"&&colorPicker.key===s.key;return <button key={i} onClick={e=>setColorPicker(open?null:{kind:"section",key:s.key,label:s.label,anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,flexShrink:0,fontSize:11,fontFamily:mf,fontWeight:500,color:s.color,background:s.color+(isActive||open?"2c":"18"),border:`1px solid ${s.color}${isActive||open?"80":"40"}`,borderRadius:6,padding:"4px 12px"}}>{s.label}</button>;})}
+              {sections.length===0&&<span style={{fontSize:10,color:"#4a4e5e"}}>[Verse] のように書くとセクションになります</span>}
+            </div>
+            <button title="文字色" onClick={e=>setColorPicker(colorPicker?.kind==="text"?null:{kind:"text",anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,flexShrink:0,padding:"4px 7px",borderRadius:6,border:"1px solid "+(colorPicker?.kind==="text"?"rgba(74,240,160,0.3)":"#3a3a4a"),color:curTheme.text}}><TextColorIcon size={13}/></button>
+            <button title="背景色" onClick={e=>setColorPicker(colorPicker?.kind==="bg"?null:{kind:"bg",anchor:e.currentTarget.getBoundingClientRect()})} style={{...btn,flexShrink:0,padding:"4px 7px",borderRadius:6,border:"1px solid "+(colorPicker?.kind==="bg"?"rgba(74,240,160,0.3)":"#3a3a4a"),color:curTheme.bg===THEME_DEFAULT.bg?"#7a7e8e":curTheme.bg}}><FillIcon size={13}/></button>
           </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px 8px 16px",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
+            <button onClick={()=>setTakeSheetOpen(true)} style={{...btn,flexShrink:0,gap:5,fontSize:11,fontFamily:mf,fontWeight:600,color:"#4af0a0",background:"#4af0a018",border:"1px solid #4af0a040",borderRadius:6,padding:"4px 10px"}}><span>{draftDisplayTitle(activeDraft,draftList.findIndex(d=>d.id===activeDraft.id))}</span>{draftList.length>1&&<span style={{fontSize:9,opacity:.7}}>/{draftList.length}</span>}<ChevronDown size={11}/></button>
+            <div style={{width:1,height:18,background:"#2a2a35",flexShrink:0}}/>
+            <div className="lw-hscroll" style={{flex:1,minWidth:0,display:"flex",gap:6,alignItems:"center",overflowX:"auto",overflowY:"hidden",whiteSpace:"nowrap",paddingBottom:2}}>
+              {caretSection?(()=>{const info=variantInfo(caretSection);const color=getSecColor("["+caretSection+"]",sectionColors);return (<>
+                <span style={{fontSize:10,fontFamily:mf,color,opacity:.8,flexShrink:0}}>{caretSection}</span>
+                {info&&info.entry.variants.map((v,i)=>{const active=v.id===info.entry.activeId;return <button key={v.id} onClick={()=>!active&&applyVariant(caretSection,v.id)} style={{...btn,flexShrink:0,gap:5,fontSize:11,fontFamily:mf,fontWeight:600,color:active?color:"#7a7e8e",background:(active?color:"#7a7e8e")+"18",border:`1px solid ${active?color:"#7a7e8e"}40`,borderRadius:6,padding:"4px 10px"}}><span>{variantLabel(i)}</span>{active&&<span onClick={e=>{e.stopPropagation();deleteVariant(caretSection,v.id);}} style={{display:"grid",placeItems:"center",width:13,height:13,opacity:.75}}><XIcon size={9}/></span>}</button>;})}
+                <button title="今の内容を複製して別パターンを作る" onClick={()=>addVariant(caretSection)} style={{...btn,flexShrink:0,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 9px"}}><Plus size={10}/>{info?"":"候補"}</button>
+              </>);})():<span style={{fontSize:10,color:"#4a4e5e"}}>セクション内で候補を作れます</span>}
+            </div>
+          </div>
+          </>)}
           {colorPicker&&<MobileColorPopover anchor={colorPicker.anchor} onClose={()=>setColorPicker(null)}
             title={colorPicker.kind==="section"?"["+colorPicker.label+"] の色":colorPicker.kind==="text"?"本文の文字色":"本文の背景色"}
             value={colorPicker.kind==="section"?(normalizeSectionColors(sectionColors)[colorPicker.key]||defaultSecColor(colorPicker.key)):colorPicker.kind==="text"?curTheme.text:curTheme.bg}
             defaultValue={colorPicker.kind==="section"?defaultSecColor(colorPicker.key):colorPicker.kind==="text"?THEME_DEFAULT.text:THEME_DEFAULT.bg}
             onChange={c=>colorPicker.kind==="section"?updateSectionColor(colorPicker.key,c):updateTheme(colorPicker.kind==="text"?{text:c}:{bg:c})}/>}
-          <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
-            {draftList.map((d,i)=>{const active=d.id===activeDraft.id;const color=active?"#4af0a0":"#7a7e8e";return <button key={d.id} onClick={()=>selectDraft(d.id)} style={{...btn,gap:5,fontSize:11,fontFamily:mf,fontWeight:500,color,background:color+"18",border:`1px solid ${color}40`,borderRadius:6,padding:"4px 12px"}}><span>{draftDisplayTitle(d,i)}</span>{draftList.length>1&&active&&<span onClick={e=>{e.stopPropagation();deleteDraft(d.id);}} style={{display:"grid",placeItems:"center",width:13,height:13,opacity:.75}}><XIcon size={9}/></span>}</button>;})}
-            <button onClick={addDraft} style={{...btn,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 12px"}}><Plus size={10}/>ADD TAKE</button>
-          </div>
-          {/* Section variants for the section under the caret */}
-          {caretSection&&(()=>{const info=variantInfo(caretSection);const color=getSecColor("["+caretSection+"]",sectionColors);return (<div style={{padding:"8px 16px",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
-            <span style={{fontSize:10,fontFamily:mf,color,opacity:.8,marginRight:2}}>{caretSection}</span>
-            {info&&info.entry.variants.map((v,i)=>{const active=v.id===info.entry.activeId;return <button key={v.id} onClick={()=>!active&&applyVariant(caretSection,v.id)} style={{...btn,gap:5,fontSize:11,fontFamily:mf,fontWeight:600,color:active?color:"#7a7e8e",background:(active?color:"#7a7e8e")+"18",border:`1px solid ${active?color:"#7a7e8e"}40`,borderRadius:6,padding:"4px 12px"}}><span>{variantLabel(i)}</span>{active&&<span onClick={e=>{e.stopPropagation();deleteVariant(caretSection,v.id);}} style={{display:"grid",placeItems:"center",width:13,height:13,opacity:.75}}><XIcon size={9}/></span>}</button>;})}
-            <button title="今の内容を複製して別パターンを作る" onClick={()=>addVariant(caretSection)} style={{...btn,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 10px"}}><Plus size={10}/>{info?"":"候補"}</button>
-            {info&&info.count>1&&<span style={{fontSize:10,color:"#4a4e5e"}}>タップで切替</span>}
-          </div>);})()}
+          {/* Take sheet */}
+          {takeSheetOpen&&(<div onClick={()=>setTakeSheetOpen(false)} style={{position:"fixed",inset:0,zIndex:2300,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end"}}>
+            <div className="lw-motion-sheet" onClick={e=>e.stopPropagation()} style={{width:"100%",background:"#111116",borderTop:"1px solid #2a2a35",borderRadius:"14px 14px 0 0",padding:"12px 16px calc(16px + env(safe-area-inset-bottom, 0px))",maxHeight:"60%",display:"flex",flexDirection:"column"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}><span style={{fontSize:11,fontWeight:600,color:"#7a7e8e",letterSpacing:"0.1em"}}>TAKES</span><button onClick={()=>setTakeSheetOpen(false)} style={{...btn,padding:4,color:"#4a4e5e"}}><XIcon size={14}/></button></div>
+              <div style={{overflowY:"auto",minHeight:0,display:"flex",flexDirection:"column",gap:6}}>
+                {draftList.map((d,i)=>{const active=d.id===activeDraft.id;return <div key={d.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <button onClick={()=>{selectDraft(d.id);setTakeSheetOpen(false);}} style={{...btn,flex:1,justifyContent:"flex-start",padding:"11px 12px",borderRadius:8,fontSize:13,fontFamily:mf,color:active?"#4af0a0":"#c8ccd8",background:active?"rgba(74,240,160,0.08)":"#0a0a0a",border:"1px solid "+(active?"rgba(74,240,160,0.3)":"#2a2a35")}}>{draftDisplayTitle(d,i)}{active&&<span style={{marginLeft:"auto",fontSize:10,opacity:.7}}>編集中</span>}</button>
+                  {draftList.length>1&&<button title="この Take を削除" onClick={()=>deleteDraft(d.id)} style={{...btn,width:36,height:38,borderRadius:8,border:"1px solid #2a2a35",color:"#4a4e5e",background:"#0a0a0a"}}><XIcon size={12}/></button>}
+                </div>;})}
+              </div>
+              <button onClick={()=>{addDraft();setTakeSheetOpen(false);}} style={{...btn,gap:6,marginTop:10,padding:"11px",borderRadius:8,border:"1px dashed #3a3a4a",color:"#7a7e8e",fontFamily:ff,fontSize:12,justifyContent:"center"}}><Plus size={12}/>ADD TAKE（本文と候補を複製）</button>
+            </div>
+          </div>)}
           <div style={{flex:1,overflow:"hidden",position:"relative",display:"flex",background:curTheme.bg}}>
             {showGutterDrop&&<div style={{position:"absolute",left:0,right:0,top:gutterDropTop-1,height:2,background:"#4af0a0",zIndex:4,pointerEvents:"none",boxShadow:"0 0 6px rgba(74,240,160,0.6)"}}/>}
             <div ref={mobileGutterRef} style={{flexShrink:0,overflow:"hidden",userSelect:"none",background:"transparent"}}>
