@@ -221,3 +221,6 @@ select:focus {
 .lw-ghost:hover .lw-variant-del { opacity: 1; }
 
 .lw-motion-fade { animation: lwFadeIn 120ms var(--lw-motion) both; }
+
+.lw-ghost-strip { scrollbar-width: thin; scrollbar-color: #404040 transparent; }
+.lw-ghost-strip::-webkit-scrollbar { height: 5px; }

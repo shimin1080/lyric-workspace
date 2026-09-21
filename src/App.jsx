@@ -464,11 +464,12 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   };
   // Ghost columns: other variants of the section under the caret, floated beside the text at the same line positions.
   const FONT = "14px " + ff, LS = 14 * 0.02, CHAR_PAD = 8;
-  let ghostCols = null;
+  let ghostCols = null, ghostStart = 0, ghostTotalW = 0, ghostMaxH = 0;
   if (ghosts && ghosts.items.length && ta.current) {
     const secLines = ls.slice(ghosts.start, ghosts.end);
-    // Leave room for the hover "+ ドラフト" button after the header line.
-    let x = CHAR_PAD + Math.max(measureLines(secLines, FONT, LS), measureLines([ls[ghosts.start] || ""], FONT, LS) + 34) + 40;
+    // Leave room for the hover "+" button after the header line.
+    ghostStart = CHAR_PAD + Math.max(measureLines(secLines, FONT, LS), measureLines([ls[ghosts.start] || ""], FONT, LS) + 34) + 40;
+    let x = 0;
     ghostCols = ghosts.items.map((g) => {
       const lines = g.text.split("\n");
       const w = Math.max(140, measureLines(lines, FONT, LS) + 24);
@@ -476,13 +477,9 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
       x += w + 16;
       return col;
     });
+    ghostTotalW = x;
+    ghostMaxH = Math.max(...ghostCols.map((c) => (c.lines.length + 1) * LH)) + 2;
   }
-  // When ghosts extend past the visible area, widen the textarea and let the wrapper scroll horizontally
-  // so the columns can be scrolled into view (the textarea itself cannot grow its scroll range for them).
-  const ghostRight = ghostCols ? ghostCols[ghostCols.length - 1].left + ghostCols[ghostCols.length - 1].width + 16 : 0;
-  const wrapW = wrapRef.current?.clientWidth || 0;
-  const wide = ghostCols && wrapW && ghostRight > wrapW;
-  const taWidth = wide ? Math.max(ghostRight, CHAR_PAD + measureLines(ls, FONT, LS) + 16) : "100%";
   const ghostTop = ghosts ? 16 + ghosts.start * LH - scroll.top : 0;
   // "+" that appears right after a [Section] header while the pointer is on that line.
   const lineFromEvent = (e) => { const el = ta.current; if (!el) return -1; const r = el.getBoundingClientRect(); return Math.floor((e.clientY - r.top - 16 + el.scrollTop) / LH); };
@@ -497,10 +494,11 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
         <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors), iD = !!lineDrag && i >= lineDrag.from && i < lineDrag.end; const dragStyle = { cursor: lineDrag ? "grabbing" : "grab", touchAction: "none", background: iD ? "rgba(74,240,160,0.12)" : "transparent", borderRadius: 2 }; if (iS) { sectionLine = 0; return (<div key={i} title="ドラッグでセクションごと移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...dragStyle }}>{label}</div>); } sectionLine += 1; return (<div key={i} title="ドラッグで行を移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iD ? "#4af0a0" : iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400, ...dragStyle }}>{sectionLine}</div>); })}</div>
       </div>
-      <div ref={wrapRef} style={{ flex: 1, position: "relative", overflowX: wide ? "auto" : "hidden", overflowY: "hidden" }}>
-        {ghostCols && <div style={{ position: "absolute", top: ghostTop, left: -scroll.left, width: wide ? taWidth : "100%", zIndex: 2, pointerEvents: "none" }}>
+      <div ref={wrapRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {ghostCols && <div className="lw-ghost-strip" style={{ position: "absolute", top: ghostTop, left: ghostStart - scroll.left, right: 0, height: ghostMaxH + 12, overflowX: "auto", overflowY: "hidden", zIndex: 2 }}>
+          <div style={{ position: "relative", width: ghostTotalW, height: ghostMaxH }}>
           {ghostCols.map((g) => (
-            <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, pointerEvents: "auto", cursor: "pointer", background: theme.bg, border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: theme.text, whiteSpace: "pre", boxSizing: "border-box" }}>
+            <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, cursor: "pointer", background: theme.bg, border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: theme.text, whiteSpace: "pre", boxSizing: "border-box" }}>
               <div style={{ height: LH, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, fontFamily: mf, fontWeight: 600, color: ghosts.color || "#7a7e8e" }}>
                 <span>{g.label}</span>
                 <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); onGhostDelete?.(g.id); }} className="lw-variant-del" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
@@ -508,10 +506,11 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
               {g.lines.map((l, i) => (<div key={i} style={{ height: LH }}>{l || " "}</div>))}
             </div>
           ))}
+          </div>
         </div>}
         {hoverHeader && onAddVariant && <button data-add-variant="true" title={"「" + hoverHeader.label + "」の別パターンを作る（今の内容を複製）"} onMouseLeave={() => setHoverLine(-1)} onMouseDown={(e) => e.preventDefault()} onClick={() => onAddVariant(hoverHeader.label)} className="lw-motion-fade" style={{ position: "absolute", left: hoverHeader.left, top: hoverHeader.top + (LH - 18) / 2, width: 18, height: 18, zIndex: 3, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: 9, fontFamily: mf, fontWeight: 600, color: hoverHeader.color, background: hoverHeader.color + "1a", border: "1px solid " + hoverHeader.color + "55", borderRadius: 2, cursor: "pointer" }}><Plus size={10} /></button>}
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
-        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: taWidth, height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: theme.text, border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: theme.text, border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
   );
