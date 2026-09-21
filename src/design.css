@@ -233,3 +233,20 @@ select:focus {
   to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 .lw-motion-sheet { animation: lwSheetIn 220ms var(--lw-motion) both; }
+
+/* Mobile toolbar motion */
+.lw-m-bars {
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 120px;
+  opacity: 1;
+  transition: max-height 280ms var(--lw-motion), opacity 220ms var(--lw-motion);
+}
+.lw-m-bars[data-collapsed="true"] { max-height: 0; opacity: 0; pointer-events: none; }
+.lw-m-chip { transition: color 180ms var(--lw-motion), border-color 180ms var(--lw-motion), background 180ms var(--lw-motion), transform 160ms var(--lw-motion), opacity 180ms var(--lw-motion); }
+.lw-m-chip:active { transform: scale(0.95); }
+@keyframes lwDropdownIn {
+  from { opacity: 0; transform: translate3d(0, -6px, 0) scale(0.98); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.lw-motion-dropdown { animation: lwDropdownIn 200ms var(--lw-motion) both; transform-origin: top left; }
