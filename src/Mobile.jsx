@@ -54,7 +54,9 @@ const remoteTime=(d,updatedAt)=>syncTime(d)||(updatedAt?Date.parse(updatedAt):0)
 const SEC_C={"Verse":"#4af0a0","Hook":"#e8a840","Chorus":"#e8a840","Bridge":"#7ab8c8","Outro":"#c88868","Intro":"#98b870"};
 const sectionColorKey=(label="")=>{const t=String(label).trim().toLowerCase();for(const k of Object.keys(SEC_C)){if(t.startsWith(k.toLowerCase()))return k;}return t||"Section";};
 const normalizeSectionColors=(colors={})=>({...SEC_C,...colors});
-function getSecColor(l,colors=SEC_C){const label=getSecLabel(l);if(!label)return null;const key=sectionColorKey(label);const palette=normalizeSectionColors(colors);return palette[key]||"#7a7e8e";}
+const SEC_BASE=["#4af0a0","#e8a840","#7ab8c8","#c88868","#98b870","#d46fa8","#9d8cf0","#f06a6a"];
+const baseSecColor=(key="")=>{let h=0;for(const ch of String(key))h=(h*31+ch.charCodeAt(0))>>>0;return SEC_BASE[h%SEC_BASE.length];};
+function getSecColor(l,colors=SEC_C){const label=getSecLabel(l);if(!label)return null;const key=sectionColorKey(label);const palette=normalizeSectionColors(colors);return palette[key]||SEC_C[key]||baseSecColor(key);}
 function getSecLabel(l){const m=l.match(/^\[(.+?)\]/);return m?m[1]:null;}
 function buildSecMap(ls,colors=SEC_C){const m=new Array(ls.length).fill(null);let c=null;for(let i=0;i<ls.length;i++){const cc=getSecColor(ls[i],colors);if(cc)c=cc;if(ls[i].trim()===""&&(i+1>=ls.length||getSecColor(ls[i+1]||"",colors)))c=null;m[i]=c;}return m;}
 const fmtT=s=>{if(!s||isNaN(s)||!isFinite(s))return"0:00";return`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,"0")}`;};

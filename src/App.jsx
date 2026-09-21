@@ -63,6 +63,11 @@ const sectionColorKey = (label = "") => {
   return t || "Section";
 };
 const normalizeSectionColors = (colors = {}) => ({ ...SEC_C, ...colors });
+// Eight base colors. Sections with no preset get one picked by a stable hash of their name, so a
+// custom [Section] always comes back with the same color.
+const SEC_BASE = ["#4af0a0", "#e8a840", "#7ab8c8", "#c88868", "#98b870", "#d46fa8", "#9d8cf0", "#f06a6a"];
+const baseSecColor = (key = "") => { let h = 0; for (const ch of String(key)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return SEC_BASE[h % SEC_BASE.length]; };
+const defaultSecColor = (key) => SEC_C[key] || baseSecColor(key);
 const THEME_DEFAULT = { text: "#c8ccd8", bg: "#0a0a0d" };
 const normalizeTheme = (t = {}) => ({ ...THEME_DEFAULT, ...t });
 // editorTheme is stored per project: { [projectId]: { text, bg } }. An older flat { text, bg } value is
@@ -72,7 +77,7 @@ const normalizeThemeStore = (v, activeProj) => {
   if (typeof v.text === "string" || typeof v.bg === "string") return activeProj ? { [activeProj]: normalizeTheme(v) } : {};
   return v;
 };
-function getSecColor(l, colors = SEC_C) { const label = getSecLabel(l); if (!label) return null; const key = sectionColorKey(label); const palette = normalizeSectionColors(colors); return palette[key] || "#7a7e8e"; }
+function getSecColor(l, colors = SEC_C) { const label = getSecLabel(l); if (!label) return null; const key = sectionColorKey(label); const palette = normalizeSectionColors(colors); return palette[key] || defaultSecColor(key); }
 function getSecLabel(l) { const m = l.match(/^\[(.+?)\]/); return m ? m[1] : null; }
 function buildSecMap(ls, colors = SEC_C) { const m = new Array(ls.length).fill(null); let c = null; for (let i = 0; i < ls.length; i++) { const cc = getSecColor(ls[i], colors); if (cc) c = cc; if (ls[i].trim() === "" && (i + 1 >= ls.length || getSecColor(ls[i + 1] || "", colors))) c = null; m[i] = c; } return m; }
 const fmtT = (s) => { if (!s || isNaN(s) || !isFinite(s)) return "0:00"; return Math.floor(s / 60) + ":" + String(Math.floor(s % 60)).padStart(2, "0"); };
@@ -562,7 +567,7 @@ function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, h
       {themeBtn("bg", "背景色", FillIcon, theme.bg === THEME_DEFAULT.bg ? "#7a7e8e" : theme.bg)}
     </span>);
   })()}
-  {picker && picker.kind === "section" && <ColorPopover anchor={picker.anchor} title={"[" + picker.label + "] の色"} value={normalizeSectionColors(sectionColors)[picker.key] || "#7a7e8e"} defaultValue={SEC_C[picker.key] || "#7a7e8e"} onChange={(c) => onColorChange?.(picker.key, c)} onClose={closePicker} />}
+  {picker && picker.kind === "section" && <ColorPopover anchor={picker.anchor} title={"[" + picker.label + "] の色"} value={normalizeSectionColors(sectionColors)[picker.key] || defaultSecColor(picker.key)} defaultValue={defaultSecColor(picker.key)} onChange={(c) => onColorChange?.(picker.key, c)} onClose={closePicker} />}
   {picker && picker.kind === "text" && <ColorPopover anchor={picker.anchor} title="本文の文字色" value={theme.text} defaultValue={THEME_DEFAULT.text} onChange={(c) => onThemeChange?.({ text: c })} onClose={closePicker} />}
   {picker && picker.kind === "bg" && <ColorPopover anchor={picker.anchor} title="本文の背景色" value={theme.bg} defaultValue={THEME_DEFAULT.bg} onChange={(c) => onThemeChange?.({ bg: c })} onClose={closePicker} />}
   </div>);
