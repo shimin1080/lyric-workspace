@@ -451,19 +451,20 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   );
 }
 
-function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, onVariantStep }) {
+function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, openLabel, onOpenVariants, onAddVariant }) {
   const s = [];
   text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
   if (!s.length) return null;
-  const arrow = { background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", opacity: 0.8 };
+  const pill = { background: "none", border: "none", padding: "0 2px", cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", gap: 2, fontFamily: mf, fontSize: 9, borderRadius: 2 };
   return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => {
-    const info = variantInfo?.(x.label.trim());
-    const isActive = activeLabel && x.label.trim() === activeLabel;
-    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
+    const label = x.label.trim();
+    const info = variantInfo?.(label);
+    const isActive = activeLabel === label;
+    const isOpen = openLabel === label;
+    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive || isOpen ? "24" : "14"), border: "1px solid " + x.color + (isActive || isOpen ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
       <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}
-      {info && info.count > 1 && isActive && <button title="前の候補 (Alt+←)" onClick={(e) => { e.preventDefault(); onVariantStep?.(x.label.trim(), -1); }} style={arrow}><ChevronLeft size={10} /></button>}
-      {info && info.count > 1 && <span style={{ fontSize: 9, opacity: 0.85 }}>{variantLabel(info.index)} {info.index + 1}/{info.count}</span>}
-      {info && info.count > 1 && isActive && <button title="次の候補 (Alt+→)" onClick={(e) => { e.preventDefault(); onVariantStep?.(x.label.trim(), 1); }} style={arrow}><ChevronRight size={10} /></button>}
+      {info && <button data-variant-anchor="true" title="候補を表示" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenVariants?.(label, e.currentTarget.getBoundingClientRect()); }} style={{ ...pill, background: x.color + (isOpen ? "40" : "22"), padding: "1px 5px" }}>{variantLabel(info.index)} {info.index + 1}/{info.count}<ChevronDown size={9} /></button>}
+      {!info && isActive && <button data-variant-anchor="true" title="別パターンを作る" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddVariant?.(label, e.currentTarget.getBoundingClientRect()); }} style={{ ...pill, opacity: 0.7 }}><Plus size={9} /></button>}
     </label>);
   })}</div>);
 }
@@ -536,6 +537,8 @@ export default function LyricWorkspace() {
   const [sectionColors, setSectionColors] = useState(SEC_C);
   const [sectionVariants, setSectionVariants] = useState({});
   const [caretLine, setCaretLine] = useState(0);
+  const [variantPop, setVariantPop] = useState(null); // { label, left, top }
+  const variantPopRef = useRef(null);
   const editorApiRef = useRef(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -845,14 +848,30 @@ export default function LyricWorkspace() {
     const idx = (info.index + dir + info.count) % info.count;
     applyVariant(label, info.entry.variants[idx].id);
   };
-  const addVariant = (label) => {
+  const addVariant = (label, anchorRect) => {
     const sec = listSections(curLines).find((x) => x.label === label); if (!sec) return;
     const entry = varStore[label] || { variants: [makeVariant(sec.body)], activeId: null };
     if (!entry.activeId) entry.activeId = entry.variants[0].id;
     const nv = makeVariant(sec.body);
     commitText(curText, { ...varStore, [label]: { variants: [...entry.variants, nv], activeId: nv.id } });
+    if (anchorRect) openVariantPop(label, anchorRect);
     focusSection(label);
   };
+  const openVariantPop = (label, rect) => {
+    if (variantPop?.label === label) { setVariantPop(null); return; }
+    const width = 280;
+    setVariantPop({ label, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), top: rect.bottom + 6, width });
+    if (caretSection !== label) focusSection(label);
+  };
+  useEffect(() => {
+    if (!variantPop) return;
+    const onDown = (e) => { if (variantPopRef.current?.contains(e.target)) return; if (e.target.closest?.("[data-variant-anchor]")) return; setVariantPop(null); };
+    const onKey = (e) => { if (e.key === "Escape") setVariantPop(null); };
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown, true); window.removeEventListener("keydown", onKey); };
+  }, [variantPop]);
+  useEffect(() => { setVariantPop(null); }, [activeProj, activeDraft?.id]);
   const deleteVariant = (label, variantId) => {
     const entry = varStore[label]; if (!entry) return;
     const idx = entry.variants.findIndex((v) => v.id === variantId); if (idx < 0) return;
@@ -1750,7 +1769,7 @@ export default function LyricWorkspace() {
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} onVariantStep={stepVariant} />
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} openLabel={variantPop?.label || null} onOpenVariants={openVariantPop} onAddVariant={addVariant} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
             {draftList.map((d, i) => {
@@ -1767,6 +1786,37 @@ export default function LyricWorkspace() {
           </div>
           <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} />
 
+          {/* Section variant popover */}
+          {variantPop && (() => {
+            const label = variantPop.label; const info = variantInfo(label);
+            const color = getSecColor("[" + label + "]", sectionColors);
+            return createPortal(
+              <div ref={variantPopRef} className="lw-motion-flyout" style={{ position: "fixed", left: variantPop.left, top: variantPop.top, width: variantPop.width, zIndex: 2400, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", maxHeight: Math.max(160, window.innerHeight - variantPop.top - 16), overflow: "hidden" }}>
+                <div style={{ padding: "8px 10px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+                    <span style={{ fontSize: 10, color: "#7a7e8e" }}>の候補</span>
+                    <span style={{ fontSize: 9, color: "#4a4e5e" }}>Alt+←/→ で切替</span>
+                  </div>
+                  <button title="今の内容を複製して候補を追加" onClick={() => addVariant(label)} style={{ ...btn, padding: 3, borderRadius: 2, color: "#7a7e8e" }}><Plus size={13} /></button>
+                </div>
+                <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {!info && <div style={{ textAlign: "center", padding: "8px", color: "#4a4e5e", fontSize: 11 }}>候補はありません</div>}
+                  {info && info.entry.variants.map((v, i) => {
+                    const active = v.id === info.entry.activeId;
+                    const nonEmpty = v.text.split("\n").filter((l) => l.trim());
+                    return (<div key={v.id} onClick={() => !active && applyVariant(label, v.id)} className="lw-variant-card" style={{ position: "relative", cursor: active ? "default" : "pointer", background: active ? color + "14" : "#0a0a0d", border: "1px solid " + (active ? color + "80" : "#2a2a35"), borderRadius: 2, padding: "7px 9px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color: active ? color : "#7a7e8e" }}>{variantLabel(i)}{active && <span style={{ fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>編集中</span>}</span>
+                        <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); deleteVariant(label, v.id); }} className="lw-variant-del" style={{ ...btn, padding: 2, borderRadius: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
+                      </div>
+                      <div style={{ fontSize: 11, lineHeight: 1.5, color: active ? "#c8ccd8" : "#7a7e8e", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{nonEmpty.length ? nonEmpty.slice(0, 3).join("\n") : <span style={{ color: "#4a4e5e" }}>(空)</span>}{nonEmpty.length > 3 && <span style={{ color: "#4a4e5e" }}> …</span>}</div>
+                    </div>);
+                  })}
+                </div>
+              </div>, document.body);
+          })()}
+
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
         </div>
@@ -1775,35 +1825,6 @@ export default function LyricWorkspace() {
         <div className="lw-motion-right-sidebar" data-open={scrapsOpen ? "true" : "false"} data-resizing={resizing ? "true" : "false"} style={{ width: scrapsOpen ? layout.rightWidth : 0, flexShrink: 0, borderLeft: scrapsOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", pointerEvents: scrapsOpen ? "auto" : "none" }}>
           {scrapsOpen && <ResizeHandle axis="x" onStart={() => beginResize("right")} onDrag={dragRightWidth} onEnd={endResize} />}
           <div ref={rightInnerRef} className="lw-motion-right-sidebar-inner" style={{ width: layout.rightWidth, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Section variants */}
-            {(() => {
-              const label = caretSection; const info = label ? variantInfo(label) : null;
-              const color = label ? getSecColor("[" + label + "]", sectionColors) : "#7a7e8e";
-              return (<div style={{ flex: "0 0 auto", maxHeight: "40%", display: "flex", flexDirection: "column", overflow: "hidden", borderBottom: "1px solid #2a2a35" }}>
-                <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <Layers size={13} color={color} /><span style={{ fontSize: 11, fontWeight: 500, color: "#c8ccd8" }}>バリエーション</span>
-                    {label && <span style={{ fontSize: 10, fontFamily: mf, color, background: color + "14", border: "1px solid " + color + "40", borderRadius: 2, padding: "1px 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>}
-                  </div>
-                  {label && <button title="今の内容を複製して候補を追加" onClick={() => addVariant(label)} style={{ ...btn, padding: 3, borderRadius: 2, color: "#7a7e8e" }}><Plus size={13} /></button>}
-                </div>
-                <div style={{ overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {!label && <div style={{ textAlign: "center", padding: "10px 12px", color: "#4a4e5e", fontSize: 11, lineHeight: 1.6 }}>[セクション名] の中にカーソルを置くと<br />そのパートの候補を並べられます</div>}
-                  {label && !info && <div style={{ textAlign: "center", padding: "10px 12px", color: "#4a4e5e", fontSize: 11, lineHeight: 1.6 }}>＋で今の {label} を複製して<br />別パターンを書き始められます</div>}
-                  {info && info.entry.variants.map((v, i) => {
-                    const active = v.id === info.entry.activeId;
-                    const preview = v.text.split("\n").filter((l) => l.trim()).slice(0, 3);
-                    return (<div key={v.id} onClick={() => !active && applyVariant(label, v.id)} className="lw-variant-card" style={{ position: "relative", cursor: active ? "default" : "pointer", background: active ? color + "14" : "#111116", border: "1px solid " + (active ? color + "80" : "#2a2a35"), borderRadius: 2, padding: "8px 10px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color: active ? color : "#7a7e8e" }}>{variantLabel(i)}{active && <span style={{ fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>編集中</span>}</span>
-                        <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); deleteVariant(label, v.id); }} className="lw-variant-del" style={{ ...btn, padding: 2, borderRadius: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
-                      </div>
-                      <div style={{ fontSize: 11, lineHeight: 1.5, color: active ? "#c8ccd8" : "#7a7e8e", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{preview.length ? preview.join("\n") : <span style={{ color: "#4a4e5e" }}>(空)</span>}{v.text.split("\n").filter((l) => l.trim()).length > 3 && <span style={{ color: "#4a4e5e" }}> …</span>}</div>
-                    </div>);
-                  })}
-                </div>
-              </div>);
-            })()}
             {/* Scrap Notes */}
             <div style={{ flex: "0 0 " + (layout.scrapRatio * 100) + "%", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
