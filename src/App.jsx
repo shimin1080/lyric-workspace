@@ -342,10 +342,11 @@ function ResizeHandle({ axis, onStart, onDrag, onEnd }) {
   );
 }
 
-function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef, ghosts, onGhostApply, onGhostDelete }) {
+function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef, ghosts, onGhostApply, onGhostDelete, onAddVariant }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
+  const [hoverLine, setHoverLine] = useState(-1);
   const [, forceRender] = useState(0);
   useEffect(() => { const onResize = () => forceRender((n) => n + 1); window.addEventListener("resize", onResize); return () => window.removeEventListener("resize", onResize); }, []);
   const [dragOver, setDragOver] = useState(false);
@@ -453,7 +454,8 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   let ghostCols = null;
   if (ghosts && ghosts.items.length && ta.current) {
     const secLines = ls.slice(ghosts.start, ghosts.end);
-    let x = CHAR_PAD + measureLines(secLines, FONT, LS) + 40;
+    // Leave room for the hover "+ ドラフト" button after the header line.
+    let x = CHAR_PAD + Math.max(measureLines(secLines, FONT, LS), measureLines([ls[ghosts.start] || ""], FONT, LS) + 76) + 40;
     ghostCols = ghosts.items.map((g) => {
       const lines = g.text.split("\n");
       const w = Math.max(140, measureLines(lines, FONT, LS) + 24);
@@ -465,6 +467,9 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
     if (ghostCols[0].left + ghostCols[0].width > ta.current.clientWidth - 8) ghostCols = null;
   }
   const ghostTop = ghosts ? 16 + ghosts.start * LH - scroll.top : 0;
+  // "+" that appears right after a [Section] header while the pointer is on that line.
+  const lineFromEvent = (e) => { const el = ta.current; if (!el) return -1; const r = el.getBoundingClientRect(); return Math.floor((e.clientY - r.top - 16 + el.scrollTop) / LH); };
+  const hoverHeader = hoverLine >= 0 && hoverLine < ls.length && getSecLabel(ls[hoverLine]) ? { line: hoverLine, label: getSecLabel(ls[hoverLine]).trim(), left: CHAR_PAD + measureLines([ls[hoverLine]], FONT, LS) + 10 - scroll.left, top: 16 + hoverLine * LH - scroll.top, color: getSecColor(ls[hoverLine], sectionColors) } : null;
   const dropTop = lineDrag ? 16 + lineDrag.to * LH - (ta.current?.scrollTop || 0) : 0;
   const showDrop = lineDrag && !isNoop(lineDrag);
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); const d = e.dataTransfer.getData("text/plain"); if (!d || !ta.current) return; const el = ta.current; const pos = el.selectionStart; const before = text.substring(0, pos); const after = text.substring(pos); const ins = (before.length > 0 && !before.endsWith("\n") ? "\n" : "") + d + "\n"; setText(before + ins + after); setTimeout(() => { el.selectionStart = el.selectionEnd = pos + ins.length; el.focus(); }, 0); };
@@ -487,26 +492,23 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
             </div>
           ))}
         </div>}
+        {hoverHeader && onAddVariant && <button data-add-variant="true" title={"「" + hoverHeader.label + "」の別パターンを作る（今の内容を複製）"} onMouseLeave={() => setHoverLine(-1)} onMouseDown={(e) => e.preventDefault()} onClick={() => onAddVariant(hoverHeader.label)} className="lw-motion-fade" style={{ position: "absolute", left: hoverHeader.left, top: hoverHeader.top + (LH - 18) / 2, height: 18, zIndex: 3, display: "inline-flex", alignItems: "center", gap: 3, padding: "0 6px", fontSize: 9, fontFamily: mf, fontWeight: 600, color: hoverHeader.color, background: hoverHeader.color + "1a", border: "1px solid " + hoverHeader.color + "55", borderRadius: 2, cursor: "pointer" }}><Plus size={9} />ドラフト</button>}
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
-        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
   );
 }
 
-function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, onAddVariant, hasAnyVariants, compare, onToggleCompare }) {
+function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, hasAnyVariants, compare, onToggleCompare }) {
   const s = [];
   text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
   if (!s.length) return null;
-  const pill = { background: "none", border: "none", padding: "0 2px", cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", gap: 2, fontFamily: mf, fontSize: 9, borderRadius: 2 };
   return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => {
     const label = x.label.trim();
-    const info = variantInfo?.(label);
     const isActive = activeLabel === label;
     return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
       <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}
-      {info && <span title="編集中の候補 / 候補数" style={{ ...pill, cursor: "default", background: x.color + "22", padding: "1px 5px" }}>{variantLabel(info.index)} {info.index + 1}/{info.count}</span>}
-      {isActive && <button title="今の内容を複製して別パターンを作る" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddVariant?.(label); }} style={{ ...pill, opacity: 0.7 }}><Plus size={9} /></button>}
     </label>);
   })}
   {hasAnyVariants && <button title={compare ? "候補の見比べ表示を隠す" : "候補を本文の横に表示する"} onClick={onToggleCompare} style={{ marginLeft: "auto", background: compare ? "rgba(74,240,160,0.08)" : "transparent", border: "1px solid " + (compare ? "rgba(74,240,160,0.3)" : "#3a3a4a"), borderRadius: 2, padding: "2px 7px", cursor: "pointer", color: compare ? "#4af0a0" : "#7a7e8e", fontSize: 10, fontFamily: mf, display: "inline-flex", alignItems: "center", gap: 4 }}>{compare ? <Eye size={11} /> : <EyeOff size={11} />}見比べ</button>}
@@ -1805,7 +1807,7 @@ export default function LyricWorkspace() {
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} onAddVariant={addVariant} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} />
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
             {draftList.map((d, i) => {
@@ -1820,7 +1822,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} />
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
