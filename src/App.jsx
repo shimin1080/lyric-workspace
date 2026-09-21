@@ -65,6 +65,13 @@ const sectionColorKey = (label = "") => {
 const normalizeSectionColors = (colors = {}) => ({ ...SEC_C, ...colors });
 const THEME_DEFAULT = { text: "#c8ccd8", bg: "#0a0a0d" };
 const normalizeTheme = (t = {}) => ({ ...THEME_DEFAULT, ...t });
+// editorTheme is stored per project: { [projectId]: { text, bg } }. An older flat { text, bg } value is
+// carried over to the project that was active when it was saved.
+const normalizeThemeStore = (v, activeProj) => {
+  if (!v || typeof v !== "object") return {};
+  if (typeof v.text === "string" || typeof v.bg === "string") return activeProj ? { [activeProj]: normalizeTheme(v) } : {};
+  return v;
+};
 function getSecColor(l, colors = SEC_C) { const label = getSecLabel(l); if (!label) return null; const key = sectionColorKey(label); const palette = normalizeSectionColors(colors); return palette[key] || "#7a7e8e"; }
 function getSecLabel(l) { const m = l.match(/^\[(.+?)\]/); return m ? m[1] : null; }
 function buildSecMap(ls, colors = SEC_C) { const m = new Array(ls.length).fill(null); let c = null; for (let i = 0; i < ls.length; i++) { const cc = getSecColor(ls[i], colors); if (cc) c = cc; if (ls[i].trim() === "" && (i + 1 >= ls.length || getSecColor(ls[i + 1] || "", colors))) c = null; m[i] = c; } return m; }
@@ -484,7 +491,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   const showDrop = lineDrag && !isNoop(lineDrag);
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); const d = e.dataTransfer.getData("text/plain"); if (!d || !ta.current) return; const el = ta.current; const pos = el.selectionStart; const before = text.substring(0, pos); const after = text.substring(pos); const ins = (before.length > 0 && !before.endsWith("\n") ? "\n" : "") + d + "\n"; setText(before + ins + after); setTimeout(() => { el.selectionStart = el.selectionEnd = pos + ins.length; el.focus(); }, 0); };
   return (
-    <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+    <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative", background: theme.bg }}>
       {showDrop && <div style={{ position: "absolute", left: 0, right: 0, top: dropTop - 1, height: 2, background: "#4af0a0", zIndex: 4, pointerEvents: "none", boxShadow: "0 0 6px rgba(74,240,160,0.6)" }} />}
       <div ref={gut} style={{ flexShrink: 0, overflowY: "hidden", paddingTop: 16, paddingBottom: 16, userSelect: "none", display: "flex" }}>
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
@@ -629,7 +636,7 @@ export default function LyricWorkspace() {
   const [activeDrafts, setActiveDrafts] = useState({});
   const [sectionColors, setSectionColors] = useState(SEC_C);
   const [sectionVariants, setSectionVariants] = useState({});
-  const [editorTheme, setEditorTheme] = useState(THEME_DEFAULT);
+  const [editorTheme, setEditorTheme] = useState({});
   const [caretLine, setCaretLine] = useState(0);
   const editorApiRef = useRef(null);
 
@@ -731,7 +738,7 @@ export default function LyricWorkspace() {
       if (data.activeDrafts) setActiveDrafts(data.activeDrafts);
       if (data.sectionColors) setSectionColors(normalizeSectionColors(data.sectionColors));
       if (data.sectionVariants) setSectionVariants(data.sectionVariants);
-      if (data.editorTheme) setEditorTheme(normalizeTheme(data.editorTheme));
+      if (data.editorTheme) setEditorTheme(normalizeThemeStore(data.editorTheme, data.activeProj));
       if (data.trash) setTrash(data.trash);
       if (data.projectList) setProjectList(data.projectList);
       if (data.projectFolders) setProjectFolders(data.projectFolders);
@@ -802,7 +809,7 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.sectionVariants) setSectionVariants(p.sectionVariants); if (p.editorTheme) setEditorTheme(normalizeTheme(p.editorTheme)); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.sectionVariants) setSectionVariants(p.sectionVariants); if (p.editorTheme) setEditorTheme(normalizeThemeStore(p.editorTheme, p.activeProj)); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   useEffect(() => {
     pulledUserRef.current = null;
@@ -843,7 +850,7 @@ export default function LyricWorkspace() {
           if (d.activeDrafts) setActiveDrafts(d.activeDrafts);
           if (d.sectionColors) setSectionColors(normalizeSectionColors(d.sectionColors));
           if (d.sectionVariants) setSectionVariants(d.sectionVariants);
-          if (d.editorTheme) setEditorTheme(normalizeTheme(d.editorTheme));
+          if (d.editorTheme) setEditorTheme(normalizeThemeStore(d.editorTheme, d.activeProj));
           if (d.trash) { const now = Date.now(); setTrash(d.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000)); }
           if (d.projectList) setProjectList(d.projectList);
           if (d.projectFolders) setProjectFolders(d.projectFolders);
@@ -874,7 +881,7 @@ export default function LyricWorkspace() {
     saveTimerRef.current = setTimeout(async () => {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
-      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, sectionVariants: o.sectionVariants || s.sectionVariants || {}, editorTheme: o.editorTheme || s.editorTheme || THEME_DEFAULT, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, sectionVariants: o.sectionVariants || s.sectionVariants || {}, editorTheme: o.editorTheme || s.editorTheme || {}, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
       d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
@@ -980,7 +987,8 @@ export default function LyricWorkspace() {
     if (!variantInfo(caretSection)) return;
     e.preventDefault(); stepVariant(caretSection, e.key === "ArrowLeft" ? -1 : 1);
   };
-  const updateTheme = (patch) => { const next = normalizeTheme({ ...editorTheme, ...patch }); setEditorTheme(next); doSave({ editorTheme: next }); };
+  const curTheme = normalizeTheme(editorTheme[activeProj]);
+  const updateTheme = (patch) => { const next = { ...editorTheme, [activeProj]: normalizeTheme({ ...curTheme, ...patch }) }; setEditorTheme(next); doSave({ editorTheme: next }); };
   const updateSectionColor = (key, color) => {
     const next = normalizeSectionColors({ ...sectionColors, [key]: color });
     setSectionColors(next);
@@ -1441,7 +1449,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, sectionVariants: {}, editorTheme: THEME_DEFAULT, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setSectionVariants({}); setEditorTheme(THEME_DEFAULT); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, sectionVariants: {}, editorTheme: {}, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setSectionVariants({}); setEditorTheme({}); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -1859,8 +1867,8 @@ export default function LyricWorkspace() {
         </div>
 
         {/* MAIN EDITOR */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", background: editorTheme.bg }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} theme={editorTheme} onThemeChange={updateTheme} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} theme={curTheme} onThemeChange={updateTheme} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>TAKES</span>
             {draftList.map((d, i) => {
@@ -1875,7 +1883,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD TAKE</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} theme={editorTheme} />
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} theme={curTheme} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
