@@ -40,6 +40,8 @@ const StopCircle=(p)=><I {...p} d={<><circle cx="12" cy="12" r="10"/><rect x="9"
 const FileText=(p)=><I {...p} d={<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>}/>;
 const Eye=(p)=><I {...p} d={<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}/>;
 const EyeOff=(p)=><I {...p} d={<><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>}/>;
+const TextColorIcon=(p)=><I {...p} d={<><path d="M5 17l5-12h4l5 12"/><path d="M7.5 12h9"/><line x1="4" y1="21" x2="20" y2="21" strokeWidth="3"/></>}/>;
+const FillIcon=(p)=><I {...p} d={<><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" fillOpacity="0.35"/><rect x="3" y="3" width="18" height="18" rx="2"/></>}/>;
 const Lock=(p)=><I {...p} d={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></>}/>;
 const Unlock=(p)=><I {...p} d={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 019.9-1"/></>}/>;
 
@@ -61,6 +63,8 @@ const sectionColorKey = (label = "") => {
   return t || "Section";
 };
 const normalizeSectionColors = (colors = {}) => ({ ...SEC_C, ...colors });
+const THEME_DEFAULT = { text: "#c8ccd8", bg: "#0a0a0d" };
+const normalizeTheme = (t = {}) => ({ ...THEME_DEFAULT, ...t });
 function getSecColor(l, colors = SEC_C) { const label = getSecLabel(l); if (!label) return null; const key = sectionColorKey(label); const palette = normalizeSectionColors(colors); return palette[key] || "#7a7e8e"; }
 function getSecLabel(l) { const m = l.match(/^\[(.+?)\]/); return m ? m[1] : null; }
 function buildSecMap(ls, colors = SEC_C) { const m = new Array(ls.length).fill(null); let c = null; for (let i = 0; i < ls.length; i++) { const cc = getSecColor(ls[i], colors); if (cc) c = cc; if (ls[i].trim() === "" && (i + 1 >= ls.length || getSecColor(ls[i + 1] || "", colors))) c = null; m[i] = c; } return m; }
@@ -344,8 +348,8 @@ function ResizeHandle({ axis, onStart, onDrag, onEnd }) {
   );
 }
 
-function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef, ghosts, onGhostApply, onGhostDelete, onAddVariant }) {
-  const ta = useRef(null), gut = useRef(null);
+function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef, ghosts, onGhostApply, onGhostDelete, onAddVariant, theme = THEME_DEFAULT }) {
+  const ta = useRef(null), gut = useRef(null), wrapRef = useRef(null);
   const [cl, setCl] = useState(0);
   const [scroll, setScroll] = useState({ top: 0, left: 0 });
   const [hoverLine, setHoverLine] = useState(-1);
@@ -465,9 +469,13 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
       x += w + 16;
       return col;
     });
-    // Hide when even the first column would not fit beside the text.
-    if (ghostCols[0].left + ghostCols[0].width > ta.current.clientWidth - 8) ghostCols = null;
   }
+  // When ghosts extend past the visible area, widen the textarea and let the wrapper scroll horizontally
+  // so the columns can be scrolled into view (the textarea itself cannot grow its scroll range for them).
+  const ghostRight = ghostCols ? ghostCols[ghostCols.length - 1].left + ghostCols[ghostCols.length - 1].width + 16 : 0;
+  const wrapW = wrapRef.current?.clientWidth || 0;
+  const wide = ghostCols && wrapW && ghostRight > wrapW;
+  const taWidth = wide ? Math.max(ghostRight, CHAR_PAD + measureLines(ls, FONT, LS) + 16) : "100%";
   const ghostTop = ghosts ? 16 + ghosts.start * LH - scroll.top : 0;
   // "+" that appears right after a [Section] header while the pointer is on that line.
   const lineFromEvent = (e) => { const el = ta.current; if (!el) return -1; const r = el.getBoundingClientRect(); return Math.floor((e.clientY - r.top - 16 + el.scrollTop) / LH); };
@@ -482,10 +490,10 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
         <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors), iD = !!lineDrag && i >= lineDrag.from && i < lineDrag.end; const dragStyle = { cursor: lineDrag ? "grabbing" : "grab", touchAction: "none", background: iD ? "rgba(74,240,160,0.12)" : "transparent", borderRadius: 2 }; if (iS) { sectionLine = 0; return (<div key={i} title="ドラッグでセクションごと移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...dragStyle }}>{label}</div>); } sectionLine += 1; return (<div key={i} title="ドラッグで行を移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iD ? "#4af0a0" : iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400, ...dragStyle }}>{sectionLine}</div>); })}</div>
       </div>
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-        {ghostCols && <div style={{ position: "absolute", top: ghostTop, left: -scroll.left, right: 0, zIndex: 2, pointerEvents: "none" }}>
+      <div ref={wrapRef} style={{ flex: 1, position: "relative", overflowX: wide ? "auto" : "hidden", overflowY: "hidden" }}>
+        {ghostCols && <div style={{ position: "absolute", top: ghostTop, left: -scroll.left, width: wide ? taWidth : "100%", zIndex: 2, pointerEvents: "none" }}>
           {ghostCols.map((g) => (
-            <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, pointerEvents: "auto", cursor: "pointer", background: "rgba(17,17,22,0.88)", border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: "#c8ccd8", whiteSpace: "pre", boxSizing: "border-box" }}>
+            <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, pointerEvents: "auto", cursor: "pointer", background: theme.bg, border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: theme.text, whiteSpace: "pre", boxSizing: "border-box" }}>
               <div style={{ height: LH, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, fontFamily: mf, fontWeight: 600, color: ghosts.color || "#7a7e8e" }}>
                 <span>{g.label}</span>
                 <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); onGhostDelete?.(g.id); }} className="lw-variant-del" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
@@ -496,24 +504,61 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
         </div>}
         {hoverHeader && onAddVariant && <button data-add-variant="true" title={"「" + hoverHeader.label + "」の別パターンを作る（今の内容を複製）"} onMouseLeave={() => setHoverLine(-1)} onMouseDown={(e) => e.preventDefault()} onClick={() => onAddVariant(hoverHeader.label)} className="lw-motion-fade" style={{ position: "absolute", left: hoverHeader.left, top: hoverHeader.top + (LH - 18) / 2, width: 18, height: 18, zIndex: 3, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: 9, fontFamily: mf, fontWeight: 600, color: hoverHeader.color, background: hoverHeader.color + "1a", border: "1px solid " + hoverHeader.color + "55", borderRadius: 2, cursor: "pointer" }}><Plus size={10} /></button>}
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
-        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: taWidth, height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: theme.text, border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
   );
 }
 
-function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, hasAnyVariants, compare, onToggleCompare }) {
+// Small anchored color editor: native picker + hex + reset to default.
+function ColorPopover({ anchor, value, defaultValue, onChange, onClose, title }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const onDown = (e) => { if (ref.current?.contains(e.target)) return; onClose(); };
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onDown, true); window.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  const width = 200;
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
+  const isDefault = String(value).toLowerCase() === String(defaultValue).toLowerCase();
+  return createPortal(
+    <div ref={ref} className="lw-motion-flyout" style={{ position: "fixed", left, top: anchor.bottom + 6, width, zIndex: 2400, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", padding: 10, fontFamily: ff }}>
+      <div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <label title="クリックで色を選ぶ" style={{ position: "relative", width: 34, height: 26, borderRadius: 2, border: "1px solid #3a3a4a", background: value, cursor: "pointer", flexShrink: 0 }}>
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" }} />
+        </label>
+        <input value={value} onChange={(e) => { const v = e.target.value.trim(); if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v); }} spellCheck={false} style={{ flex: 1, minWidth: 0, background: "#0a0a0d", border: "1px solid #3a3a4a", borderRadius: 2, padding: "5px 7px", fontSize: 11, color: "#c8ccd8", outline: "none", fontFamily: mf }} />
+      </div>
+      <button disabled={isDefault} onClick={() => onChange(defaultValue)} style={{ marginTop: 8, width: "100%", padding: "5px 0", borderRadius: 2, border: "1px solid #3a3a4a", background: "transparent", color: isDefault ? "#4a4e5e" : "#c8ccd8", fontSize: 10, cursor: isDefault ? "default" : "pointer", fontFamily: ff }}>初期化</button>
+    </div>, document.body);
+}
+
+function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, hasAnyVariants, compare, onToggleCompare, theme = THEME_DEFAULT, onThemeChange }) {
+  const [picker, setPicker] = useState(null); // { kind: "section"|"text"|"bg", key, label, anchor }
+  const closePicker = useCallback(() => setPicker(null), []);
   const s = [];
   text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
-  if (!s.length) return null;
-  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => {
+  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{!s.length && <span style={{ fontSize: 10, color: "#4a4e5e" }}>[Verse] のように書くとセクションになります</span>}{s.map((x, i) => {
     const label = x.label.trim();
     const isActive = activeLabel === label;
-    return (<label key={i} title="クリックで色変更" style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
-      <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", left: 0, bottom: 0 }} />{x.label}
-    </label>);
+    const open = picker?.kind === "section" && picker.key === x.key;
+    return (<button key={i} title="クリックで色変更" onClick={(e) => setPicker(open ? null : { kind: "section", key: x.key, label: x.label, anchor: e.currentTarget.getBoundingClientRect() })} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive || open ? "24" : "14"), border: "1px solid " + x.color + (isActive || open ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>{x.label}</button>);
   })}
-  {hasAnyVariants && <button title={compare ? "候補の見比べ表示を隠す" : "候補を本文の横に表示する"} onClick={onToggleCompare} style={{ marginLeft: "auto", background: compare ? "rgba(74,240,160,0.08)" : "transparent", border: "1px solid " + (compare ? "rgba(74,240,160,0.3)" : "#3a3a4a"), borderRadius: 2, padding: "2px 7px", cursor: "pointer", color: compare ? "#4af0a0" : "#7a7e8e", fontSize: 10, fontFamily: mf, display: "inline-flex", alignItems: "center", gap: 4 }}>{compare ? <Eye size={11} /> : <EyeOff size={11} />}見比べ</button>}
+  {(() => {
+    const iconBtn = (on) => ({ background: on ? "rgba(74,240,160,0.08)" : "transparent", border: "1px solid " + (on ? "rgba(74,240,160,0.3)" : "#3a3a4a"), borderRadius: 2, padding: "2px 5px", cursor: "pointer", color: on ? "#4af0a0" : "#7a7e8e", display: "inline-flex", alignItems: "center" });
+    const themeBtn = (kind, label, Icon, color) => (<button title={label} onClick={(e) => setPicker(picker?.kind === kind ? null : { kind, label, anchor: e.currentTarget.getBoundingClientRect() })} style={{ ...iconBtn(picker?.kind === kind), color }}><Icon size={11} /></button>);
+    return (<span style={{ marginLeft: "auto", display: "inline-flex", gap: 4 }}>
+      {hasAnyVariants && <button title={compare ? "候補の見比べ表示を隠す" : "候補を本文の横に表示する"} onClick={onToggleCompare} style={iconBtn(compare)}>{compare ? <Eye size={11} /> : <EyeOff size={11} />}</button>}
+      {themeBtn("text", "文字色", TextColorIcon, theme.text)}
+      {themeBtn("bg", "背景色", FillIcon, theme.bg === THEME_DEFAULT.bg ? "#7a7e8e" : theme.bg)}
+    </span>);
+  })()}
+  {picker && picker.kind === "section" && <ColorPopover anchor={picker.anchor} title={"[" + picker.label + "] の色"} value={normalizeSectionColors(sectionColors)[picker.key] || "#7a7e8e"} defaultValue={SEC_C[picker.key] || "#7a7e8e"} onChange={(c) => onColorChange?.(picker.key, c)} onClose={closePicker} />}
+  {picker && picker.kind === "text" && <ColorPopover anchor={picker.anchor} title="本文の文字色" value={theme.text} defaultValue={THEME_DEFAULT.text} onChange={(c) => onThemeChange?.({ text: c })} onClose={closePicker} />}
+  {picker && picker.kind === "bg" && <ColorPopover anchor={picker.anchor} title="本文の背景色" value={theme.bg} defaultValue={THEME_DEFAULT.bg} onChange={(c) => onThemeChange?.({ bg: c })} onClose={closePicker} />}
   </div>);
 }
 
@@ -584,6 +629,7 @@ export default function LyricWorkspace() {
   const [activeDrafts, setActiveDrafts] = useState({});
   const [sectionColors, setSectionColors] = useState(SEC_C);
   const [sectionVariants, setSectionVariants] = useState({});
+  const [editorTheme, setEditorTheme] = useState(THEME_DEFAULT);
   const [caretLine, setCaretLine] = useState(0);
   const editorApiRef = useRef(null);
 
@@ -648,7 +694,7 @@ export default function LyricWorkspace() {
   const pulledUserRef = useRef(null);
 
   // Always keep stateRef up to date for async push
-  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
+  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, editorTheme, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -685,6 +731,7 @@ export default function LyricWorkspace() {
       if (data.activeDrafts) setActiveDrafts(data.activeDrafts);
       if (data.sectionColors) setSectionColors(normalizeSectionColors(data.sectionColors));
       if (data.sectionVariants) setSectionVariants(data.sectionVariants);
+      if (data.editorTheme) setEditorTheme(normalizeTheme(data.editorTheme));
       if (data.trash) setTrash(data.trash);
       if (data.projectList) setProjectList(data.projectList);
       if (data.projectFolders) setProjectFolders(data.projectFolders);
@@ -755,7 +802,7 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.sectionVariants) setSectionVariants(p.sectionVariants); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.sectionVariants) setSectionVariants(p.sectionVariants); if (p.editorTheme) setEditorTheme(normalizeTheme(p.editorTheme)); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   useEffect(() => {
     pulledUserRef.current = null;
@@ -796,6 +843,7 @@ export default function LyricWorkspace() {
           if (d.activeDrafts) setActiveDrafts(d.activeDrafts);
           if (d.sectionColors) setSectionColors(normalizeSectionColors(d.sectionColors));
           if (d.sectionVariants) setSectionVariants(d.sectionVariants);
+          if (d.editorTheme) setEditorTheme(normalizeTheme(d.editorTheme));
           if (d.trash) { const now = Date.now(); setTrash(d.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000)); }
           if (d.projectList) setProjectList(d.projectList);
           if (d.projectFolders) setProjectFolders(d.projectFolders);
@@ -826,7 +874,7 @@ export default function LyricWorkspace() {
     saveTimerRef.current = setTimeout(async () => {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
-      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, sectionVariants: o.sectionVariants || s.sectionVariants || {}, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, sectionVariants: o.sectionVariants || s.sectionVariants || {}, editorTheme: o.editorTheme || s.editorTheme || THEME_DEFAULT, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
       d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
@@ -932,6 +980,7 @@ export default function LyricWorkspace() {
     if (!variantInfo(caretSection)) return;
     e.preventDefault(); stepVariant(caretSection, e.key === "ArrowLeft" ? -1 : 1);
   };
+  const updateTheme = (patch) => { const next = normalizeTheme({ ...editorTheme, ...patch }); setEditorTheme(next); doSave({ editorTheme: next }); };
   const updateSectionColor = (key, color) => {
     const next = normalizeSectionColors({ ...sectionColors, [key]: color });
     setSectionColors(next);
@@ -1392,7 +1441,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, sectionVariants: {}, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setSectionVariants({}); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, sectionVariants: {}, editorTheme: THEME_DEFAULT, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setSectionVariants({}); setEditorTheme(THEME_DEFAULT); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -1434,7 +1483,7 @@ export default function LyricWorkspace() {
       await deleteAudio(prefix + track.id); delete audioCacheRef.current[track.id]; await removeAudio(track.id);
     }
     const nt = trash.filter(t => t.id !== trashId); setTrash(nt);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash: nt, projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, editorTheme, trash: nt, projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1449,7 +1498,7 @@ export default function LyricWorkspace() {
       }
     }
     setTrash([]);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash: [], projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, editorTheme, trash: [], projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1810,8 +1859,8 @@ export default function LyricWorkspace() {
         </div>
 
         {/* MAIN EDITOR */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} />
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", background: editorTheme.bg }}>
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} theme={editorTheme} onThemeChange={updateTheme} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>TAKES</span>
             {draftList.map((d, i) => {
@@ -1826,7 +1875,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD TAKE</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} />
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} theme={editorTheme} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
