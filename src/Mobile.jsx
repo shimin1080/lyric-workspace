@@ -219,6 +219,13 @@ export default function MobileApp(){
   const applyVariant=(label,variantId)=>{const entry=varStore[label];const v=entry?.variants.find(x=>x.id===variantId);if(!v)return;commitText(replaceSectionBody(curLines,label,v.text).join("\n"),{...varStore,[label]:{...entry,activeId:variantId}});focusSection(label);};
   const addVariant=label=>{const sec=listSections(curLines).find(x=>x.label===label);if(!sec)return;const entry=varStore[label]||{variants:[makeVariant(sec.body)],activeId:null};if(!entry.activeId)entry.activeId=entry.variants[0].id;const nv=makeVariant(sec.body);commitText(curText,{...varStore,[label]:{variants:[...entry.variants,nv],activeId:nv.id}});focusSection(label);};
   const deleteVariant=(label,variantId)=>{const entry=varStore[label];if(!entry)return;const idx=entry.variants.findIndex(v=>v.id===variantId);if(idx<0)return;const rest=entry.variants.filter(v=>v.id!==variantId);const nextStore={...varStore};if(rest.length<=1)delete nextStore[label];else nextStore[label]={...entry,variants:rest,activeId:entry.activeId};if(variantId===entry.activeId&&rest.length){const nextActive=rest[Math.max(0,idx-1)];if(nextStore[label])nextStore[label].activeId=nextActive.id;commitText(replaceSectionBody(curLines,label,nextActive.text).join("\n"),nextStore);focusSection(label);}else commitText(curText,nextStore);};
+  const stepVariant=(label,dir)=>{const info=variantInfo(label);if(!info||info.count<2)return null;const idx=(info.index+dir+info.count)%info.count;applyVariant(label,info.entry.variants[idx].id);return{label:variantLabel(idx),index:idx,count:info.count};};
+  // Swipe left/right over a section switches its variant (next / previous)
+  const swipeRef=useRef(null);
+  const[swipeToast,setSwipeToast]=useState(null);
+  const swipeToastTimer=useRef(null);
+  const onBodyTouchStart=e=>{if(e.touches.length!==1)return;const t=e.touches[0];const el=mobileTextRef.current;if(!el)return;const r=el.getBoundingClientRect();const line=Math.floor((t.clientY-r.top-16+el.scrollTop)/mobileLineHeight);swipeRef.current={x:t.clientX,y:t.clientY,t:Date.now(),line};};
+  const onBodyTouchEnd=e=>{const st=swipeRef.current;swipeRef.current=null;if(!st)return;const t=e.changedTouches[0];const dx=t.clientX-st.x,dy=t.clientY-st.y;if(Date.now()-st.t>600||Math.abs(dx)<60||Math.abs(dy)>40||Math.abs(dx)<Math.abs(dy)*2)return;const label=sectionAtLine(curLines,st.line);if(!label)return;const res=stepVariant(label,dx<0?1:-1);if(!res)return;e.preventDefault();const color=getSecColor("["+label+"]",sectionColors);setSwipeToast({...res,color,x:t.clientX,y:st.y});if(swipeToastTimer.current)clearTimeout(swipeToastTimer.current);swipeToastTimer.current=setTimeout(()=>setSwipeToast(null),700);};
   const curTheme=normalizeTheme(editorTheme[activeProj]);
   const updateTheme=patch=>{const next={...editorTheme,[activeProj]:normalizeTheme({...curTheme,...patch})};setEditorTheme(next);doSave({editorTheme:next});};
   const updateSectionColor=(key,color)=>{const next=normalizeSectionColors({...sectionColors,[key]:color});setSectionColors(next);doSave({sectionColors:next});};
@@ -466,7 +473,8 @@ export default function MobileApp(){
             </div>;})}
             <button className="lw-m-chip" onClick={()=>{addDraft();setTakeMenu(null);}} style={{...btn,gap:5,padding:"8px 10px",borderRadius:7,border:"1px dashed #3a3a4a",color:"#7a7e8e",fontFamily:mf,fontSize:11,justifyContent:"center"}}><Plus size={11}/>ADD TAKE</button>
           </div>)}
-          <div style={{flex:1,overflow:"hidden",position:"relative",display:"flex",background:curTheme.bg}}>
+          <div onTouchStart={onBodyTouchStart} onTouchEnd={onBodyTouchEnd} style={{flex:1,overflow:"hidden",position:"relative",display:"flex",background:curTheme.bg}}>
+            {swipeToast&&<div className="lw-swipe-toast" style={{position:"fixed",left:swipeToast.x,top:swipeToast.y-56,transform:"translateX(-50%)",zIndex:2200,pointerEvents:"none",padding:"6px 12px",borderRadius:8,background:"#111116",border:"1px solid "+swipeToast.color+"90",color:swipeToast.color,fontFamily:mf,fontSize:13,fontWeight:700,boxShadow:"0 8px 20px rgba(0,0,0,0.4)"}}>{swipeToast.label}<span style={{fontSize:10,fontWeight:400,opacity:.7,marginLeft:6}}>{swipeToast.index+1}/{swipeToast.count}</span></div>}
             {showGutterDrop&&<div style={{position:"absolute",left:0,right:0,top:gutterDropTop-1,height:2,background:"#4af0a0",zIndex:4,pointerEvents:"none",boxShadow:"0 0 6px rgba(74,240,160,0.6)"}}/>}
             <div ref={mobileGutterRef} style={{flexShrink:0,overflow:"hidden",userSelect:"none",background:"transparent"}}>
               <div style={{display:"flex",paddingTop:16,paddingBottom:16,transform:`translateY(${-mobileScrollTop}px)`,willChange:"transform"}}>

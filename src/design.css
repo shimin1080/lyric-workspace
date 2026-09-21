@@ -251,3 +251,11 @@ select:focus {
 }
 .lw-motion-dropdown { animation: lwDropdownIn 200ms var(--lw-motion) both; transform-origin: top left; }
 .lw-m-chip-open { animation: lwDropdownIn 200ms var(--lw-motion) both; }
+
+@keyframes lwToastIn {
+  from { opacity: 0; transform: translate3d(-50%, 6px, 0) scale(0.96); }
+  30% { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
+  70% { opacity: 1; }
+  to { opacity: 0; transform: translate3d(-50%, -4px, 0); }
+}
+.lw-swipe-toast { animation: lwToastIn 700ms var(--lw-motion) both; }
