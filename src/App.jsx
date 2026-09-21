@@ -237,6 +237,40 @@ function findSection(text, sel) {
   return sec;
 }
 
+/* ── Section variants ──────────────────────
+   Per (project, draft), each named [Section] can hold alternative bodies (A/B/C…).
+   The editor text stays the source of truth: the active variant mirrors what is in the text. */
+const variantScope = (projectId, draftId) => projectId + ":" + draftId;
+const variantLabel = (i) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i] || String(i + 1);
+const makeVariant = (text) => ({ id: "var_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6), text });
+// Every named section occurrence: header index, exclusive end, body (without trailing blank lines), trailing blank count.
+function listSections(lines) {
+  const out = [];
+  lines.forEach((l, i) => { const lb = getSecLabel(l); if (lb) out.push({ label: lb.trim(), start: i, end: lines.length }); });
+  out.forEach((sec, k) => {
+    if (k + 1 < out.length) sec.end = out[k + 1].start;
+    const body = lines.slice(sec.start + 1, sec.end);
+    let trail = 0; while (trail < body.length && body[body.length - 1 - trail].trim() === "") trail += 1;
+    sec.trail = trail; sec.body = body.slice(0, body.length - trail).join("\n");
+  });
+  return out;
+}
+// Replace the body of every occurrence of `label`, keeping each occurrence's header and trailing blank lines.
+function replaceSectionBody(lines, label, body) {
+  const secs = listSections(lines).filter((sec) => sec.label === label);
+  if (!secs.length) return lines;
+  const out = []; let cursor = 0;
+  for (const sec of secs) {
+    out.push(...lines.slice(cursor, sec.start + 1));
+    if (body !== "") out.push(...body.split("\n"));
+    for (let i = 0; i < sec.trail; i++) out.push("");
+    cursor = sec.end;
+  }
+  out.push(...lines.slice(cursor));
+  return out;
+}
+const sectionAtLine = (lines, line) => { let cur = null; for (let i = 0; i <= line && i < lines.length; i++) { const lb = getSecLabel(lines[i]); if (lb) cur = lb.trim(); } return cur; };
+
 const EMOJI_OPTS = ["🎵", "🎤", "🔥", "🧊", "🏚️", "🏀", "💀", "🌙", "🚬", "📻", "🎹", "🌊", "⚡", "🍵"];
 const ff = "'Courier New', 'JetBrains Mono', ui-monospace, Menlo, monospace";
 const mf = ff;
@@ -296,7 +330,7 @@ function ResizeHandle({ axis, onStart, onDrag, onEnd }) {
   );
 }
 
-function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
+function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -307,12 +341,23 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
     if (!ta.current) return;
     const el = ta.current;
     const pos = el.selectionStart;
-    const before = text.substring(0, pos);
+    const before = el.value.substring(0, pos);
     const lines = before.split("\n");
     const line = lines.length - 1;
     const col = lines.at(-1)?.length || 0;
     setCl(line);
+    onCaretLine?.(line);
     setCaret({ top: 16 + line * LH - el.scrollTop, left: 8 + col * 8.45 - el.scrollLeft });
+  };
+  // Imperative helper for the parent: put the caret at the start of a line, keeping the scroll position.
+  if (apiRef) apiRef.current = {
+    caretLine: () => { const el = ta.current; return el ? el.value.substring(0, el.selectionStart).split("\n").length - 1 : 0; },
+    focusLine: (line) => {
+      const el = ta.current; if (!el) return;
+      const st = el.scrollTop;
+      const pos = el.value.split("\n").slice(0, line).reduce((n, l) => n + l.length + 1, 0);
+      el.focus(); el.selectionStart = el.selectionEnd = pos; el.scrollTop = st; sync();
+    },
   };
   const sync = () => { if (ta.current && gut.current) gut.current.scrollTop = ta.current.scrollTop; updateCaret(); };
   const uc = () => { updateCaret(); };
@@ -400,17 +445,27 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
       </div>
       <div style={{ flex: 1, position: "relative" }}>
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
-        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
+        <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
     </div>
   );
 }
 
-function SectionNav({ text, sectionColors = SEC_C, onColorChange }) {
+function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, onVariantStep }) {
   const s = [];
   text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
   if (!s.length) return null;
-  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + "14", border: "1px solid " + x.color + "40", borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}><input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}</label>))}</div>);
+  const arrow = { background: "none", border: "none", padding: 0, cursor: "pointer", color: "inherit", display: "inline-flex", alignItems: "center", opacity: 0.8 };
+  return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => {
+    const info = variantInfo?.(x.label.trim());
+    const isActive = activeLabel && x.label.trim() === activeLabel;
+    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
+      <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}
+      {info && info.count > 1 && isActive && <button title="前の候補 (Alt+←)" onClick={(e) => { e.preventDefault(); onVariantStep?.(x.label.trim(), -1); }} style={arrow}><ChevronLeft size={10} /></button>}
+      {info && info.count > 1 && <span style={{ fontSize: 9, opacity: 0.85 }}>{variantLabel(info.index)} {info.index + 1}/{info.count}</span>}
+      {info && info.count > 1 && isActive && <button title="次の候補 (Alt+→)" onClick={(e) => { e.preventDefault(); onVariantStep?.(x.label.trim(), 1); }} style={arrow}><ChevronRight size={10} /></button>}
+    </label>);
+  })}</div>);
 }
 
 function ScrapCard({ card, onDelete }) {
@@ -479,6 +534,9 @@ export default function LyricWorkspace() {
   const [drafts, setDrafts] = useState({});
   const [activeDrafts, setActiveDrafts] = useState({});
   const [sectionColors, setSectionColors] = useState(SEC_C);
+  const [sectionVariants, setSectionVariants] = useState({});
+  const [caretLine, setCaretLine] = useState(0);
+  const editorApiRef = useRef(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrapsOpen, setScrapsOpen] = useState(true);
@@ -541,7 +599,7 @@ export default function LyricWorkspace() {
   const pulledUserRef = useRef(null);
 
   // Always keep stateRef up to date for async push
-  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
+  stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
 
@@ -577,6 +635,7 @@ export default function LyricWorkspace() {
       if (data.drafts) setDrafts(data.drafts);
       if (data.activeDrafts) setActiveDrafts(data.activeDrafts);
       if (data.sectionColors) setSectionColors(normalizeSectionColors(data.sectionColors));
+      if (data.sectionVariants) setSectionVariants(data.sectionVariants);
       if (data.trash) setTrash(data.trash);
       if (data.projectList) setProjectList(data.projectList);
       if (data.projectFolders) setProjectFolders(data.projectFolders);
@@ -647,7 +706,7 @@ export default function LyricWorkspace() {
   }, [isRecording]);
 
   // Load
-  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
+  useEffect(() => { (async () => { try { const p = await _loadData(S_KEY); if (p) { localUpdatedAtRef.current = syncTime(p); localLastSyncedAtRef.current = syncedTime(p) || localUpdatedAtRef.current; if (p.projects) setProjects(p.projects); if (p.lyrics) setLyrics(p.lyrics); if (p.cards) setCards(p.cards); if (p.activeProj) setActiveProj(p.activeProj); if (p.audioLib) setAudioLib(p.audioLib); if (p.recLib) setRecLib(p.recLib); if (p.memo) setMemo(p.memo); if (p.drafts) setDrafts(p.drafts); if (p.activeDrafts) setActiveDrafts(p.activeDrafts); if (p.sectionColors) setSectionColors(normalizeSectionColors(p.sectionColors)); if (p.sectionVariants) setSectionVariants(p.sectionVariants); if (p.trash) { const now = Date.now(); const alive = p.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000); setTrash(alive); } if (p.projectList) setProjectList(p.projectList); if (p.projectFolders) setProjectFolders(p.projectFolders); } } catch (e) { console.error("Load:", e); } setLoading(false); })(); }, []);
 
   useEffect(() => {
     pulledUserRef.current = null;
@@ -687,6 +746,7 @@ export default function LyricWorkspace() {
           if (d.drafts) setDrafts(d.drafts);
           if (d.activeDrafts) setActiveDrafts(d.activeDrafts);
           if (d.sectionColors) setSectionColors(normalizeSectionColors(d.sectionColors));
+          if (d.sectionVariants) setSectionVariants(d.sectionVariants);
           if (d.trash) { const now = Date.now(); setTrash(d.trash.filter(t => now - t.deletedAt < 30*24*60*60*1000)); }
           if (d.projectList) setProjectList(d.projectList);
           if (d.projectFolders) setProjectFolders(d.projectFolders);
@@ -717,7 +777,7 @@ export default function LyricWorkspace() {
     saveTimerRef.current = setTimeout(async () => {
       // Read latest state from ref, merge with overrides
       const s = stateRef.current;
-      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
+      const d = syncStamp({ projects: o.projects || s.projects, lyrics: o.lyrics || s.lyrics, cards: o.cards || s.cards, activeProj: o.activeProj || s.activeProj, audioLib: o.audioLib || s.audioLib, recLib: o.recLib || s.recLib, memo: o.memo || s.memo, drafts: o.drafts || s.drafts, activeDrafts: o.activeDrafts || s.activeDrafts, sectionColors: o.sectionColors || s.sectionColors || SEC_C, sectionVariants: o.sectionVariants || s.sectionVariants || {}, trash: o.trash || s.trash, projectList: o.projectList || s.projectList, projectFolders: o.projectFolders || s.projectFolders });
       d.__lastSyncedAt = localLastSyncedAtRef.current;
       localUpdatedAtRef.current = d.__updatedAt;
       await _saveData(S_KEY, d);
@@ -737,14 +797,81 @@ export default function LyricWorkspace() {
   const activeDraftId = activeDrafts[activeProj] || draftList[0]?.id;
   const activeDraft = draftList.find((d) => d.id === activeDraftId) || draftList[0];
   const curText = activeDraft?.text ?? lyrics[activeProj] ?? "";
-  const setCurText = (t) => {
+  const curLines = curText.split("\n");
+  const varScope = variantScope(activeProj, activeDraft?.id || "draft_default");
+  const varStore = sectionVariants[varScope] || {};
+  const commitText = (t, storeOverride) => {
     const base = drafts[activeProj]?.length ? drafts[activeProj] : draftList;
     const list = base.map((d) => d.id === activeDraft.id ? { ...d, text: t } : d);
     const nd = { ...drafts, [activeProj]: list };
     const nad = { ...activeDrafts, [activeProj]: activeDraft.id };
     const nl = { ...lyrics, [activeProj]: t };
     setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
-    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+    const o = { drafts: nd, activeDrafts: nad, lyrics: nl };
+    if (storeOverride) { const nsv = { ...sectionVariants, [varScope]: storeOverride }; setSectionVariants(nsv); o.sectionVariants = nsv; }
+    doSave(o);
+  };
+  // Editing the text: the edited occurrence of a tracked section (the one under the caret, else the first
+  // one that differs) becomes the active variant's text.
+  const setCurText = (t) => {
+    let next = null;
+    if (Object.keys(varStore).length) {
+      const secs = listSections(t.split("\n"));
+      const cl = editorApiRef.current?.caretLine?.() ?? caretLine;
+      for (const [label, entry] of Object.entries(varStore)) {
+        const active = entry.variants.find((v) => v.id === entry.activeId);
+        if (!active) continue;
+        const occ = secs.filter((sec) => sec.label === label && sec.body !== active.text);
+        const changed = occ.find((sec) => cl >= sec.start && cl < sec.end) || occ[0];
+        if (changed) { next = next || { ...varStore }; next[label] = { ...entry, variants: entry.variants.map((v) => v.id === active.id ? { ...v, text: changed.body } : v) }; }
+      }
+    }
+    commitText(t, next);
+  };
+
+  // ── Section variants (A/B/C per named section) ──
+  const caretSection = sectionAtLine(curLines, caretLine);
+  const variantInfo = (label) => { const e = varStore[label]; if (!e) return null; const index = Math.max(0, e.variants.findIndex((v) => v.id === e.activeId)); return { index, count: e.variants.length, entry: e }; };
+  const focusSection = (label) => { const sec = listSections(curLines).find((x) => x.label === label); if (sec) setTimeout(() => editorApiRef.current?.focusLine(sec.start), 0); };
+  const applyVariant = (label, variantId) => {
+    const entry = varStore[label]; const v = entry?.variants.find((x) => x.id === variantId);
+    if (!v) return;
+    const nextLines = replaceSectionBody(curLines, label, v.text);
+    commitText(nextLines.join("\n"), { ...varStore, [label]: { ...entry, activeId: variantId } });
+    focusSection(label);
+  };
+  const stepVariant = (label, dir) => {
+    const info = variantInfo(label); if (!info || info.count < 2) return;
+    const idx = (info.index + dir + info.count) % info.count;
+    applyVariant(label, info.entry.variants[idx].id);
+  };
+  const addVariant = (label) => {
+    const sec = listSections(curLines).find((x) => x.label === label); if (!sec) return;
+    const entry = varStore[label] || { variants: [makeVariant(sec.body)], activeId: null };
+    if (!entry.activeId) entry.activeId = entry.variants[0].id;
+    const nv = makeVariant(sec.body);
+    commitText(curText, { ...varStore, [label]: { variants: [...entry.variants, nv], activeId: nv.id } });
+    focusSection(label);
+  };
+  const deleteVariant = (label, variantId) => {
+    const entry = varStore[label]; if (!entry) return;
+    const idx = entry.variants.findIndex((v) => v.id === variantId); if (idx < 0) return;
+    const rest = entry.variants.filter((v) => v.id !== variantId);
+    const nextStore = { ...varStore };
+    if (rest.length <= 1) { delete nextStore[label]; } else { nextStore[label] = { ...entry, variants: rest, activeId: entry.activeId }; }
+    if (variantId === entry.activeId && rest.length) {
+      const nextActive = rest[Math.max(0, idx - 1)];
+      if (nextStore[label]) nextStore[label].activeId = nextActive.id;
+      commitText(replaceSectionBody(curLines, label, nextActive.text).join("\n"), nextStore);
+      focusSection(label);
+    } else {
+      commitText(curText, nextStore);
+    }
+  };
+  const onEditorKeyDown = (e) => {
+    if (!e.altKey || (e.key !== "ArrowLeft" && e.key !== "ArrowRight") || !caretSection) return;
+    if (!variantInfo(caretSection)) return;
+    e.preventDefault(); stepVariant(caretSection, e.key === "ArrowLeft" ? -1 : 1);
   };
   const updateSectionColor = (key, color) => {
     const next = normalizeSectionColors({ ...sectionColors, [key]: color });
@@ -807,8 +934,9 @@ export default function LyricWorkspace() {
     const nd = { ...drafts, [activeProj]: list };
     const nad = { ...activeDrafts, [activeProj]: next.id };
     const nl = { ...lyrics, [activeProj]: next.text || "" };
-    setDrafts(nd); setActiveDrafts(nad); setLyrics(nl);
-    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl });
+    const nsv = { ...sectionVariants }; delete nsv[variantScope(activeProj, id)];
+    setDrafts(nd); setActiveDrafts(nad); setLyrics(nl); setSectionVariants(nsv);
+    doSave({ drafts: nd, activeDrafts: nad, lyrics: nl, sectionVariants: nsv });
   };
   const addFolder = () => { if (!newFolderTitle.trim()) return; const nf = [...projectFolders, { id: "folder_" + Date.now(), title: newFolderTitle.trim(), projectIds: [], open: true, locked: false }]; setProjectFolders(nf); setShowNewFolder(false); setNewFolderTitle(""); doSave({ projectFolders: nf }); };
   const renameFolder = (id, title) => { const nf = projectFolders.map((f) => f.id === id ? { ...f, title } : f); setProjectFolders(nf); doSave({ projectFolders: nf }); };
@@ -1203,7 +1331,7 @@ export default function LyricWorkspace() {
   const addManualCard = () => { if (!scrapInputText.trim()) return; const tags = scrapInputTags.trim() ? scrapInputTags.split(/[,、\s]+/).filter(Boolean) : ["メモ"]; const nc = [{ id: Date.now(), text: scrapInputText.trim(), tags, time: ts(), projId: activeProj }, ...cards]; setCards(nc); setScrapInputText(""); setScrapInputTags(""); setShowScrapInput(false); doSave({ cards: nc }); };
 
   // Reset
-  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
+  const resetAll = async () => { for (const t of audioLib) await deleteAudio(S_AP + t.id); for (const t of recLib) await deleteAudio(S_RC + t.id); await deleteData(S_KEY); await clearAllAudio(); const firstDraft = { id: "draft_default", title: draftTitle(0), text: "" }; const resetData = syncStamp({ projects: [{ id: "proj_1", title: "New Project", emoji: "🎵" }], lyrics: { "proj_1": "" }, drafts: { "proj_1": [firstDraft] }, activeDrafts: { "proj_1": firstDraft.id }, sectionColors: SEC_C, sectionVariants: {}, cards: [], audioLib: [], recLib: [], memo: {}, trash: [], projectList: [], projectFolders: [], activeProj: "proj_1" }); resetData.__lastSyncedAt = localLastSyncedAtRef.current; localUpdatedAtRef.current = resetData.__updatedAt; setProjects(resetData.projects); setLyrics(resetData.lyrics); setDrafts(resetData.drafts); setActiveDrafts(resetData.activeDrafts); setSectionColors(SEC_C); setSectionVariants({}); setCards([]); setAudioLib([]); setRecLib([]); setMemo({}); setTrash([]); setProjectList([]); setProjectFolders([]); setActiveProj("proj_1"); setShowSettings(false); if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current.src = ""; } setTrackName(""); setIsPlaying(false); setActiveTrackId(null); await _saveData(S_KEY, resetData); if (user) { const pushResult = await push(resetData); if (pushResult?.ok) { const synced = markSynced(resetData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } } };
 
   // Audio playback
   const playTrack = useCallback((meta, b64) => { const a = audioElRef.current; if (!a) return; if (meta.id === activeTrackId && a.src) { if (isPlaying) { a.pause(); setIsPlaying(false); } else { a.play().then(() => setIsPlaying(true)).catch(() => {}); } return; } a.pause(); a.src = b64; a.volume = isMuted ? 0 : volume; a.loop = repeatOn; setTrackName(meta.name); setActiveTrackId(meta.id); setSeekPos(0); setCurTime(0); setDur(0); a.load(); const rdy = () => { a.play().then(() => setIsPlaying(true)).catch(() => {}); a.removeEventListener("canplay", rdy); }; a.addEventListener("canplay", rdy); }, [isMuted, volume, activeTrackId, isPlaying, repeatOn]);
@@ -1245,7 +1373,7 @@ export default function LyricWorkspace() {
       await deleteAudio(prefix + track.id); delete audioCacheRef.current[track.id]; await removeAudio(track.id);
     }
     const nt = trash.filter(t => t.id !== trashId); setTrash(nt);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash: nt, projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash: nt, projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1260,7 +1388,7 @@ export default function LyricWorkspace() {
       }
     }
     setTrash([]);
-    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash: [], projectList, projectFolders });
+    const saveData = syncStamp({ projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, sectionVariants, trash: [], projectList, projectFolders });
     saveData.__lastSyncedAt = localLastSyncedAtRef.current;
     localUpdatedAtRef.current = saveData.__updatedAt;
     await _saveData(S_KEY, saveData); if (user) { const pushResult = await pushNow(saveData); if (pushResult?.ok) { const synced = markSynced(saveData); localLastSyncedAtRef.current = synced.__lastSyncedAt; await _saveData(S_KEY, synced); } }
@@ -1622,7 +1750,7 @@ export default function LyricWorkspace() {
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} />
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} onVariantStep={stepVariant} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
             {draftList.map((d, i) => {
@@ -1637,7 +1765,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} />
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}
@@ -1647,6 +1775,35 @@ export default function LyricWorkspace() {
         <div className="lw-motion-right-sidebar" data-open={scrapsOpen ? "true" : "false"} data-resizing={resizing ? "true" : "false"} style={{ width: scrapsOpen ? layout.rightWidth : 0, flexShrink: 0, borderLeft: scrapsOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", pointerEvents: scrapsOpen ? "auto" : "none" }}>
           {scrapsOpen && <ResizeHandle axis="x" onStart={() => beginResize("right")} onDrag={dragRightWidth} onEnd={endResize} />}
           <div ref={rightInnerRef} className="lw-motion-right-sidebar-inner" style={{ width: layout.rightWidth, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            {/* Section variants */}
+            {(() => {
+              const label = caretSection; const info = label ? variantInfo(label) : null;
+              const color = label ? getSecColor("[" + label + "]", sectionColors) : "#7a7e8e";
+              return (<div style={{ flex: "0 0 auto", maxHeight: "40%", display: "flex", flexDirection: "column", overflow: "hidden", borderBottom: "1px solid #2a2a35" }}>
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <Layers size={13} color={color} /><span style={{ fontSize: 11, fontWeight: 500, color: "#c8ccd8" }}>バリエーション</span>
+                    {label && <span style={{ fontSize: 10, fontFamily: mf, color, background: color + "14", border: "1px solid " + color + "40", borderRadius: 2, padding: "1px 6px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>}
+                  </div>
+                  {label && <button title="今の内容を複製して候補を追加" onClick={() => addVariant(label)} style={{ ...btn, padding: 3, borderRadius: 2, color: "#7a7e8e" }}><Plus size={13} /></button>}
+                </div>
+                <div style={{ overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+                  {!label && <div style={{ textAlign: "center", padding: "10px 12px", color: "#4a4e5e", fontSize: 11, lineHeight: 1.6 }}>[セクション名] の中にカーソルを置くと<br />そのパートの候補を並べられます</div>}
+                  {label && !info && <div style={{ textAlign: "center", padding: "10px 12px", color: "#4a4e5e", fontSize: 11, lineHeight: 1.6 }}>＋で今の {label} を複製して<br />別パターンを書き始められます</div>}
+                  {info && info.entry.variants.map((v, i) => {
+                    const active = v.id === info.entry.activeId;
+                    const preview = v.text.split("\n").filter((l) => l.trim()).slice(0, 3);
+                    return (<div key={v.id} onClick={() => !active && applyVariant(label, v.id)} className="lw-variant-card" style={{ position: "relative", cursor: active ? "default" : "pointer", background: active ? color + "14" : "#111116", border: "1px solid " + (active ? color + "80" : "#2a2a35"), borderRadius: 2, padding: "8px 10px" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color: active ? color : "#7a7e8e" }}>{variantLabel(i)}{active && <span style={{ fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>編集中</span>}</span>
+                        <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); deleteVariant(label, v.id); }} className="lw-variant-del" style={{ ...btn, padding: 2, borderRadius: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
+                      </div>
+                      <div style={{ fontSize: 11, lineHeight: 1.5, color: active ? "#c8ccd8" : "#7a7e8e", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{preview.length ? preview.join("\n") : <span style={{ color: "#4a4e5e" }}>(空)</span>}{v.text.split("\n").filter((l) => l.trim()).length > 3 && <span style={{ color: "#4a4e5e" }}> …</span>}</div>
+                    </div>);
+                  })}
+                </div>
+              </div>);
+            })()}
             {/* Scrap Notes */}
             <div style={{ flex: "0 0 " + (layout.scrapRatio * 100) + "%", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>

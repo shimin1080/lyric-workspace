@@ -211,3 +211,6 @@ select:focus {
 .lw-motion-right-sidebar[data-resizing="true"] .lw-motion-right-sidebar-inner {
   transition: none;
 }
+
+.lw-variant-card .lw-variant-del { opacity: 0; transition: opacity 120ms; }
+.lw-variant-card:hover .lw-variant-del { opacity: 1; }
