@@ -335,22 +335,15 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
     return sectionBounds(arr).reduce((best, b) => Math.abs(b - raw) < Math.abs(best - raw) ? b : best, 0);
   };
   const isNoop = (d) => d.to >= d.from && d.to <= d.end;
-  const moveBlock = ({ from, end, section, to }) => {
+  const moveBlock = ({ from, end, to }) => {
     const arr = curLines();
     if (from < 0 || end > arr.length || to >= from && to <= end) return;
     const block = arr.slice(from, end);
     const rest = [...arr.slice(0, from), ...arr.slice(end)];
     const ins = to > from ? to - (end - from) : to;
-    if (section) {
-      // Keep one blank line between the moved section and its new neighbours.
-      if (ins > 0 && rest[ins - 1].trim() !== "") block.unshift("");
-      if (ins < rest.length && block[block.length - 1].trim() !== "") block.push("");
-      if (ins === rest.length) { while (block.length > 1 && block[block.length - 1].trim() === "") block.pop(); }
-    }
     rest.splice(ins, 0, ...block);
     setText(rest.join("\n"));
-    const headerIdx = ins + (section && block[0] === "" ? 1 : 0);
-    const pos = rest.slice(0, headerIdx).reduce((n, l) => n + l.length + 1, 0);
+    const pos = rest.slice(0, ins).reduce((n, l) => n + l.length + 1, 0);
     const st = ta.current?.scrollTop || 0;
     setTimeout(() => { const el = ta.current; if (!el) return; el.focus(); el.selectionStart = el.selectionEnd = pos; el.scrollTop = st; sync(); }, 0);
   };
