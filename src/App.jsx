@@ -506,7 +506,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
             <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, cursor: "pointer", background: theme.bg, border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: theme.text, whiteSpace: "pre", boxSizing: "border-box" }}>
               <div style={{ height: LH, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, fontFamily: mf, fontWeight: 600, color: ghosts.color || "#7a7e8e" }}>
                 <span>{g.label}</span>
-                <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); onGhostDelete?.(g.id); }} className="lw-variant-del" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
+                <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); onGhostDelete?.(g.id); }} className="lw-variant-del" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: ghosts.color || "#7a7e8e", fontSize: 12, lineHeight: 1 }}>×</button>
               </div>
               {g.lines.map((l, i) => (<div key={i} style={{ height: LH }}>{l || " "}</div>))}
             </div>
