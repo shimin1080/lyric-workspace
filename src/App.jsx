@@ -38,6 +38,8 @@ const Headphones=(p)=><I {...p} d={<><path d="M3 18v-6a9 9 0 0118 0v6"/><path d=
 const MicIcon=(p)=><I {...p} d={<><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>}/>;
 const StopCircle=(p)=><I {...p} d={<><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" fill={p.fill||"none"}/></>}/>;
 const FileText=(p)=><I {...p} d={<><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></>}/>;
+const Eye=(p)=><I {...p} d={<><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></>}/>;
+const EyeOff=(p)=><I {...p} d={<><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></>}/>;
 const Lock=(p)=><I {...p} d={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></>}/>;
 const Unlock=(p)=><I {...p} d={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 019.9-1"/></>}/>;
 
@@ -269,6 +271,15 @@ function replaceSectionBody(lines, label, body) {
   out.push(...lines.slice(cursor));
   return out;
 }
+// Width of the widest line in the editor font (used to place ghost columns clear of the text).
+let measureCtx = null;
+function measureLines(lines, font, letterSpacing = 0) {
+  if (!measureCtx) { const c = document.createElement("canvas"); measureCtx = c.getContext("2d"); }
+  measureCtx.font = font;
+  let w = 0;
+  for (const l of lines) { const m = measureCtx.measureText(l).width + l.length * letterSpacing; if (m > w) w = m; }
+  return w;
+}
 const sectionAtLine = (lines, line) => { let cur = null; for (let i = 0; i <= line && i < lines.length; i++) { const lb = getSecLabel(lines[i]); if (lb) cur = lb.trim(); } return cur; };
 
 const EMOJI_OPTS = ["🎵", "🎤", "🔥", "🧊", "🏚️", "🏀", "💀", "🌙", "🚬", "📻", "🎹", "🌊", "⚡", "🍵"];
@@ -277,7 +288,7 @@ const mf = ff;
 
 /* ── Layout prefs (per device, not synced) ── */
 const LAYOUT_KEY = "lyric-workspace-layout-v1";
-const LAYOUT_DEFAULT = { rightWidth: 300, scrapRatio: 0.5 };
+const LAYOUT_DEFAULT = { rightWidth: 300, scrapRatio: 0.5, compare: true };
 const RIGHT_MIN = 220, RIGHT_MAX = 640, SCRAP_RATIO_MIN = 0.15, SCRAP_RATIO_MAX = 0.85;
 function loadLayoutPrefs() {
   try {
@@ -286,6 +297,7 @@ function loadLayoutPrefs() {
     return {
       rightWidth: Math.min(RIGHT_MAX, Math.max(RIGHT_MIN, Number(p.rightWidth) || LAYOUT_DEFAULT.rightWidth)),
       scrapRatio: Math.min(SCRAP_RATIO_MAX, Math.max(SCRAP_RATIO_MIN, Number(p.scrapRatio) || LAYOUT_DEFAULT.scrapRatio)),
+      compare: p.compare !== false,
     };
   } catch (e) { return { ...LAYOUT_DEFAULT }; }
 }
@@ -330,9 +342,12 @@ function ResizeHandle({ axis, onStart, onDrag, onEnd }) {
   );
 }
 
-function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef }) {
+function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCaretLine, onKeyDown, apiRef, ghosts, onGhostApply, onGhostDelete }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
+  const [scroll, setScroll] = useState({ top: 0, left: 0 });
+  const [, forceRender] = useState(0);
+  useEffect(() => { const onResize = () => forceRender((n) => n + 1); window.addEventListener("resize", onResize); return () => window.removeEventListener("resize", onResize); }, []);
   const [dragOver, setDragOver] = useState(false);
   const [caret, setCaret] = useState({ top: 16, left: 8 });
   const ls = text.split("\n"), sm = buildSecMap(ls, sectionColors), LH = 28, caretH = LH;
@@ -359,7 +374,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
       el.focus(); el.selectionStart = el.selectionEnd = pos; el.scrollTop = st; sync();
     },
   };
-  const sync = () => { if (ta.current && gut.current) gut.current.scrollTop = ta.current.scrollTop; updateCaret(); };
+  const sync = () => { if (ta.current && gut.current) { gut.current.scrollTop = ta.current.scrollTop; setScroll({ top: ta.current.scrollTop, left: ta.current.scrollLeft }); } updateCaret(); };
   const uc = () => { updateCaret(); };
 
   // Line reordering: drag a line number in the gutter to move that line.
@@ -433,6 +448,23 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
     window.addEventListener("pointercancel", up);
     autoScrollRef.current = requestAnimationFrame(tick);
   };
+  // Ghost columns: other variants of the section under the caret, floated beside the text at the same line positions.
+  const FONT = "14px " + ff, LS = 14 * 0.02, CHAR_PAD = 8;
+  let ghostCols = null;
+  if (ghosts && ghosts.items.length && ta.current) {
+    const secLines = ls.slice(ghosts.start, ghosts.end);
+    let x = CHAR_PAD + measureLines(secLines, FONT, LS) + 40;
+    ghostCols = ghosts.items.map((g) => {
+      const lines = g.text.split("\n");
+      const w = Math.max(140, measureLines(lines, FONT, LS) + 24);
+      const col = { ...g, lines, left: x, width: w };
+      x += w + 16;
+      return col;
+    });
+    // Hide when even the first column would not fit beside the text.
+    if (ghostCols[0].left + ghostCols[0].width > ta.current.clientWidth - 8) ghostCols = null;
+  }
+  const ghostTop = ghosts ? 16 + ghosts.start * LH - scroll.top : 0;
   const dropTop = lineDrag ? 16 + lineDrag.to * LH - (ta.current?.scrollTop || 0) : 0;
   const showDrop = lineDrag && !isNoop(lineDrag);
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); const d = e.dataTransfer.getData("text/plain"); if (!d || !ta.current) return; const el = ta.current; const pos = el.selectionStart; const before = text.substring(0, pos); const after = text.substring(pos); const ins = (before.length > 0 && !before.endsWith("\n") ? "\n" : "") + d + "\n"; setText(before + ins + after); setTimeout(() => { el.selectionStart = el.selectionEnd = pos + ins.length; el.focus(); }, 0); };
@@ -443,7 +475,18 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
         <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors), iD = !!lineDrag && i >= lineDrag.from && i < lineDrag.end; const dragStyle = { cursor: lineDrag ? "grabbing" : "grab", touchAction: "none", background: iD ? "rgba(74,240,160,0.12)" : "transparent", borderRadius: 2 }; if (iS) { sectionLine = 0; return (<div key={i} title="ドラッグでセクションごと移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...dragStyle }}>{label}</div>); } sectionLine += 1; return (<div key={i} title="ドラッグで行を移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iD ? "#4af0a0" : iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400, ...dragStyle }}>{sectionLine}</div>); })}</div>
       </div>
-      <div style={{ flex: 1, position: "relative" }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {ghostCols && <div style={{ position: "absolute", top: ghostTop, left: -scroll.left, right: 0, zIndex: 2, pointerEvents: "none" }}>
+          {ghostCols.map((g) => (
+            <div key={g.id} className="lw-ghost" onClick={() => onGhostApply?.(g.id)} title="クリックでこの候補に切り替え" style={{ position: "absolute", top: 0, left: g.left, width: g.width, pointerEvents: "auto", cursor: "pointer", background: "rgba(17,17,22,0.88)", border: "1px dashed " + (ghosts.color || "#3a3a4a") + "66", borderRadius: 2, padding: "0 11px", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", color: "#c8ccd8", whiteSpace: "pre", boxSizing: "border-box" }}>
+              <div style={{ height: LH, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 10, fontFamily: mf, fontWeight: 600, color: ghosts.color || "#7a7e8e" }}>
+                <span>{g.label}</span>
+                <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); onGhostDelete?.(g.id); }} className="lw-variant-del" style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
+              </div>
+              {g.lines.map((l, i) => (<div key={i} style={{ height: LH }}>{l || " "}</div>))}
+            </div>
+          ))}
+        </div>}
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
         <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
@@ -451,7 +494,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   );
 }
 
-function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, openLabel, onOpenVariants, onAddVariant }) {
+function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, variantInfo, onAddVariant, hasAnyVariants, compare, onToggleCompare }) {
   const s = [];
   text.split("\n").forEach((l) => { const lb = getSecLabel(l); if (lb) s.push({ label: lb, key: sectionColorKey(lb), color: getSecColor(l, sectionColors) }); });
   if (!s.length) return null;
@@ -460,13 +503,14 @@ function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, v
     const label = x.label.trim();
     const info = variantInfo?.(label);
     const isActive = activeLabel === label;
-    const isOpen = openLabel === label;
-    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive || isOpen ? "24" : "14"), border: "1px solid " + x.color + (isActive || isOpen ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
+    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
       <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}
-      {info && <button data-variant-anchor="true" title="候補を表示" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenVariants?.(label, e.currentTarget.getBoundingClientRect()); }} style={{ ...pill, background: x.color + (isOpen ? "40" : "22"), padding: "1px 5px" }}>{variantLabel(info.index)} {info.index + 1}/{info.count}<ChevronDown size={9} /></button>}
-      {!info && isActive && <button data-variant-anchor="true" title="別パターンを作る" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddVariant?.(label, e.currentTarget.getBoundingClientRect()); }} style={{ ...pill, opacity: 0.7 }}><Plus size={9} /></button>}
+      {info && <span title="編集中の候補 / 候補数" style={{ ...pill, cursor: "default", background: x.color + "22", padding: "1px 5px" }}>{variantLabel(info.index)} {info.index + 1}/{info.count}</span>}
+      {isActive && <button title="今の内容を複製して別パターンを作る" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onAddVariant?.(label); }} style={{ ...pill, opacity: 0.7 }}><Plus size={9} /></button>}
     </label>);
-  })}</div>);
+  })}
+  {hasAnyVariants && <button title={compare ? "候補の見比べ表示を隠す" : "候補を本文の横に表示する"} onClick={onToggleCompare} style={{ marginLeft: "auto", background: compare ? "rgba(74,240,160,0.08)" : "transparent", border: "1px solid " + (compare ? "rgba(74,240,160,0.3)" : "#3a3a4a"), borderRadius: 2, padding: "2px 7px", cursor: "pointer", color: compare ? "#4af0a0" : "#7a7e8e", fontSize: 10, fontFamily: mf, display: "inline-flex", alignItems: "center", gap: 4 }}>{compare ? <Eye size={11} /> : <EyeOff size={11} />}見比べ</button>}
+  </div>);
 }
 
 function ScrapCard({ card, onDelete }) {
@@ -537,8 +581,6 @@ export default function LyricWorkspace() {
   const [sectionColors, setSectionColors] = useState(SEC_C);
   const [sectionVariants, setSectionVariants] = useState({});
   const [caretLine, setCaretLine] = useState(0);
-  const [variantPop, setVariantPop] = useState(null); // { label, left, top }
-  const variantPopRef = useRef(null);
   const editorApiRef = useRef(null);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -848,30 +890,24 @@ export default function LyricWorkspace() {
     const idx = (info.index + dir + info.count) % info.count;
     applyVariant(label, info.entry.variants[idx].id);
   };
-  const addVariant = (label, anchorRect) => {
+  const addVariant = (label) => {
     const sec = listSections(curLines).find((x) => x.label === label); if (!sec) return;
     const entry = varStore[label] || { variants: [makeVariant(sec.body)], activeId: null };
     if (!entry.activeId) entry.activeId = entry.variants[0].id;
     const nv = makeVariant(sec.body);
     commitText(curText, { ...varStore, [label]: { variants: [...entry.variants, nv], activeId: nv.id } });
-    if (anchorRect) openVariantPop(label, anchorRect);
     focusSection(label);
   };
-  const openVariantPop = (label, rect) => {
-    if (variantPop?.label === label) { setVariantPop(null); return; }
-    const width = 280;
-    setVariantPop({ label, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)), top: rect.bottom + 6, width });
-    if (caretSection !== label) focusSection(label);
-  };
-  useEffect(() => {
-    if (!variantPop) return;
-    const onDown = (e) => { if (variantPopRef.current?.contains(e.target)) return; if (e.target.closest?.("[data-variant-anchor]")) return; setVariantPop(null); };
-    const onKey = (e) => { if (e.key === "Escape") setVariantPop(null); };
-    document.addEventListener("pointerdown", onDown, true);
-    window.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onDown, true); window.removeEventListener("keydown", onKey); };
-  }, [variantPop]);
-  useEffect(() => { setVariantPop(null); }, [activeProj, activeDraft?.id]);
+  // Ghost columns for the editor: the non-active variants of the section under the caret.
+  const ghosts = (() => {
+    if (!layout.compare || !caretSection) return null;
+    const info = variantInfo(caretSection); if (!info || info.count < 2) return null;
+    const secs = listSections(curLines).filter((x) => x.label === caretSection);
+    const sec = secs.find((x) => caretLine >= x.start && caretLine < x.end) || secs[0]; if (!sec) return null;
+    const items = info.entry.variants.map((v, i) => ({ id: v.id, label: variantLabel(i), text: v.text })).filter((v) => v.id !== info.entry.activeId);
+    return { start: sec.start, end: sec.end, items, color: getSecColor("[" + caretSection + "]", sectionColors) };
+  })();
+  const hasAnyVariants = Object.keys(varStore).length > 0;
   const deleteVariant = (label, variantId) => {
     const entry = varStore[label]; if (!entry) return;
     const idx = entry.variants.findIndex((v) => v.id === variantId); if (idx < 0) return;
@@ -1769,7 +1805,7 @@ export default function LyricWorkspace() {
 
         {/* MAIN EDITOR */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} openLabel={variantPop?.label || null} onOpenVariants={openVariantPop} onAddVariant={addVariant} />
+          <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} variantInfo={variantInfo} onAddVariant={addVariant} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
             {draftList.map((d, i) => {
@@ -1784,38 +1820,7 @@ export default function LyricWorkspace() {
             })}
             <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
           </div>
-          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} />
-
-          {/* Section variant popover */}
-          {variantPop && (() => {
-            const label = variantPop.label; const info = variantInfo(label);
-            const color = getSecColor("[" + label + "]", sectionColors);
-            return createPortal(
-              <div ref={variantPopRef} className="lw-motion-flyout" style={{ position: "fixed", left: variantPop.left, top: variantPop.top, width: variantPop.width, zIndex: 2400, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, boxShadow: "0 20px 40px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", maxHeight: Math.max(160, window.innerHeight - variantPop.top - 16), overflow: "hidden" }}>
-                <div style={{ padding: "8px 10px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-                    <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-                    <span style={{ fontSize: 10, color: "#7a7e8e" }}>の候補</span>
-                    <span style={{ fontSize: 9, color: "#4a4e5e" }}>Alt+←/→ で切替</span>
-                  </div>
-                  <button title="今の内容を複製して候補を追加" onClick={() => addVariant(label)} style={{ ...btn, padding: 3, borderRadius: 2, color: "#7a7e8e" }}><Plus size={13} /></button>
-                </div>
-                <div style={{ overflowY: "auto", padding: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-                  {!info && <div style={{ textAlign: "center", padding: "8px", color: "#4a4e5e", fontSize: 11 }}>候補はありません</div>}
-                  {info && info.entry.variants.map((v, i) => {
-                    const active = v.id === info.entry.activeId;
-                    const nonEmpty = v.text.split("\n").filter((l) => l.trim());
-                    return (<div key={v.id} onClick={() => !active && applyVariant(label, v.id)} className="lw-variant-card" style={{ position: "relative", cursor: active ? "default" : "pointer", background: active ? color + "14" : "#0a0a0d", border: "1px solid " + (active ? color + "80" : "#2a2a35"), borderRadius: 2, padding: "7px 9px" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-                        <span style={{ fontSize: 10, fontFamily: mf, fontWeight: 600, color: active ? color : "#7a7e8e" }}>{variantLabel(i)}{active && <span style={{ fontWeight: 400, marginLeft: 6, opacity: 0.8 }}>編集中</span>}</span>
-                        <button title="この候補を削除" onClick={(e) => { e.stopPropagation(); deleteVariant(label, v.id); }} className="lw-variant-del" style={{ ...btn, padding: 2, borderRadius: 2, color: "#4a4e5e", fontSize: 12, lineHeight: 1 }}>×</button>
-                      </div>
-                      <div style={{ fontSize: 11, lineHeight: 1.5, color: active ? "#c8ccd8" : "#7a7e8e", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{nonEmpty.length ? nonEmpty.slice(0, 3).join("\n") : <span style={{ color: "#4a4e5e" }}>(空)</span>}{nonEmpty.length > 3 && <span style={{ color: "#4a4e5e" }}> …</span>}</div>
-                    </div>);
-                  })}
-                </div>
-              </div>, document.body);
-          })()}
+          <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} />
 
           {/* Context Menu */}
           {ctxMenu && (<div onClick={(e) => e.stopPropagation()} style={{ position: "fixed", left: Math.min(ctxMenu.x, window.innerWidth - 200), top: Math.min(ctxMenu.y, window.innerHeight - 80), zIndex: 999, animation: "ctxFade 0.12s ease-out" }}><div style={{ width: 200, background: "#111116", border: "1px solid #4a4e5e", borderRadius: 2, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.5)" }}><div style={{ padding: "8px 12px", borderBottom: "1px solid #2a2a35" }}><div style={{ fontSize: 10, color: "#7a7e8e", marginBottom: 3 }}>選択テキスト</div><div style={{ fontSize: 10, color: "#e8a840", fontFamily: mf, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>「{selText}」</div></div><div style={{ padding: "4px 0" }}><button onClick={saveSelToScrap} style={{ ...btn, width: "100%", gap: 8, padding: "8px 12px", fontSize: 11, color: "#c8ccd8", fontFamily: ff, textAlign: "left" }}><Bookmark size={11} /><span>スクラップに保存</span></button></div></div></div>)}

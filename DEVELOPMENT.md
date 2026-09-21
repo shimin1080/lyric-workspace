@@ -87,6 +87,7 @@ The saved app data object uses:
 - `audioLib`
 - `recLib`
 - `trash`
+- `sectionVariants` — per `"<projectId>:<draftId>"`, per `[Section]` label: `{ variants: [{ id, text }], activeId }`. The editor text is the source of truth; the active variant mirrors the section body in the text.
 
 ## Supabase Notes
 

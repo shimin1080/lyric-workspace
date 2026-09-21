@@ -214,3 +214,8 @@ select:focus {
 
 .lw-variant-card .lw-variant-del { opacity: 0; transition: opacity 120ms; }
 .lw-variant-card:hover .lw-variant-del { opacity: 1; }
+
+.lw-ghost { opacity: 0.55; transition: opacity 140ms var(--lw-motion), border-color 140ms; }
+.lw-ghost:hover { opacity: 1; }
+.lw-ghost .lw-variant-del { opacity: 0; transition: opacity 120ms; }
+.lw-ghost:hover .lw-variant-del { opacity: 1; }
