@@ -61,8 +61,8 @@ const fmtT=s=>{if(!s||isNaN(s)||!isFinite(s))return"0:00";return`${Math.floor(s/
 const fmtS=b=>b<1048576?(b/1024).toFixed(1)+"KB":(b/1048576).toFixed(1)+"MB";
 const ts=()=>{const n=new Date();return`${n.getHours()}:${String(n.getMinutes()).padStart(2,"0")}`;};
 function findSection(text,sel){const idx=text.indexOf(sel);if(idx===-1)return"メモ";const before=text.substring(0,idx);const lines=text.split("\n");const li=before.split("\n").length-1;let sec="メモ";for(let i=0;i<=li&&i<lines.length;i++){const lb=getSecLabel(lines[i]);if(lb)sec=lb;}return sec;}
-const draftTitle=idx=>`Draft ${idx+1}`;
-const draftDisplayTitle=(draft,idx)=>/^第.+案$/.test(String(draft?.title||""))?draftTitle(idx):(draft?.title||draftTitle(idx));
+const draftTitle=idx=>`Take ${idx+1}`;
+const draftDisplayTitle=(draft,idx)=>/^(第.+案|Draft \d+|Take \d+)$/.test(String(draft?.title||""))?draftTitle(idx):(draft?.title||draftTitle(idx));
 const makeDraft=(idx,text="")=>({id:"draft_"+Date.now()+"_"+idx,title:draftTitle(idx),text});
 const projectDrafts=(drafts,projectId,text="")=>{const list=drafts?.[projectId];return Array.isArray(list)&&list.length?list:[{id:"draft_default",title:draftTitle(0),text}];};
 
@@ -371,7 +371,7 @@ export default function MobileApp(){
           {sections.length>0&&(<div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>{sections.map((s,i)=>(<label key={i} title="クリックで色変更" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontFamily:mf,fontWeight:500,color:s.color,background:s.color+"18",border:`1px solid ${s.color}40`,borderRadius:6,padding:"4px 12px",cursor:"pointer"}}><input type="color" value={s.color} onChange={e=>updateSectionColor(s.key,e.target.value)} style={{width:13,height:13,padding:0,border:"none",background:"transparent"}}/>{s.label}</label>))}</div>)}
           <div style={{padding:"10px 16px",display:"flex",gap:6,flexWrap:"wrap",flexShrink:0,borderBottom:"1px solid #1a1a1a"}}>
             {draftList.map((d,i)=>{const active=d.id===activeDraft.id;const color=active?"#4af0a0":"#7a7e8e";return <button key={d.id} onClick={()=>selectDraft(d.id)} style={{...btn,gap:5,fontSize:11,fontFamily:mf,fontWeight:500,color,background:color+"18",border:`1px solid ${color}40`,borderRadius:6,padding:"4px 12px"}}><span>{draftDisplayTitle(d,i)}</span>{draftList.length>1&&active&&<span onClick={e=>{e.stopPropagation();deleteDraft(d.id);}} style={{display:"grid",placeItems:"center",width:13,height:13,opacity:.75}}><XIcon size={9}/></span>}</button>;})}
-            <button onClick={addDraft} style={{...btn,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 12px"}}><Plus size={10}/>ADD DRAFT</button>
+            <button onClick={addDraft} style={{...btn,gap:4,fontSize:11,fontFamily:mf,fontWeight:500,color:"#7a7e8e",background:"#7a7e8e18",border:"1px solid #7a7e8e40",borderRadius:6,padding:"4px 12px"}}><Plus size={10}/>ADD TAKE</button>
           </div>
           <div style={{flex:1,overflow:"hidden",position:"relative",display:"flex"}}>
             <div ref={mobileGutterRef} style={{flexShrink:0,overflow:"hidden",userSelect:"none",background:"#0a0a0a"}}>

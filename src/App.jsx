@@ -85,8 +85,10 @@ const getDragPayload = (e) => {
   const text = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain") || "{}";
   try { return JSON.parse(text); } catch (err) { return {}; }
 };
-const draftTitle = (idx) => `Draft ${idx + 1}`;
-const draftDisplayTitle = (draft, idx) => /^第.+案$/.test(String(draft?.title || "")) ? draftTitle(idx) : (draft?.title || draftTitle(idx));
+const draftTitle = (idx) => `Take ${idx + 1}`;
+const draftDisplayTitle = (draft, idx) => /^(第.+案|Draft \d+|Take \d+)$/.test(String(draft?.title || "")) ? draftTitle(idx) : (draft?.title || draftTitle(idx));
+// Deep-copy a take's section variants (fresh ids, same active choice) for a new take.
+const cloneVariantStore = (store) => { const out = {}; for (const [label, e] of Object.entries(store || {})) { const map = {}; const variants = e.variants.map((v) => { const nv = makeVariant(v.text); map[v.id] = nv.id; return nv; }); out[label] = { variants, activeId: map[e.activeId] || variants[0]?.id }; } return out; };
 const makeDraft = (idx, text = "") => ({ id: "draft_" + Date.now() + "_" + idx, title: draftTitle(idx), text });
 const projectDrafts = (drafts, projectId, text = "") => {
   const list = drafts?.[projectId];
@@ -455,7 +457,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
   if (ghosts && ghosts.items.length && ta.current) {
     const secLines = ls.slice(ghosts.start, ghosts.end);
     // Leave room for the hover "+ ドラフト" button after the header line.
-    let x = CHAR_PAD + Math.max(measureLines(secLines, FONT, LS), measureLines([ls[ghosts.start] || ""], FONT, LS) + 76) + 40;
+    let x = CHAR_PAD + Math.max(measureLines(secLines, FONT, LS), measureLines([ls[ghosts.start] || ""], FONT, LS) + 34) + 40;
     ghostCols = ghosts.items.map((g) => {
       const lines = g.text.split("\n");
       const w = Math.max(140, measureLines(lines, FONT, LS) + 24);
@@ -492,7 +494,7 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C, onCa
             </div>
           ))}
         </div>}
-        {hoverHeader && onAddVariant && <button data-add-variant="true" title={"「" + hoverHeader.label + "」の別パターンを作る（今の内容を複製）"} onMouseLeave={() => setHoverLine(-1)} onMouseDown={(e) => e.preventDefault()} onClick={() => onAddVariant(hoverHeader.label)} className="lw-motion-fade" style={{ position: "absolute", left: hoverHeader.left, top: hoverHeader.top + (LH - 18) / 2, height: 18, zIndex: 3, display: "inline-flex", alignItems: "center", gap: 3, padding: "0 6px", fontSize: 9, fontFamily: mf, fontWeight: 600, color: hoverHeader.color, background: hoverHeader.color + "1a", border: "1px solid " + hoverHeader.color + "55", borderRadius: 2, cursor: "pointer" }}><Plus size={9} />ドラフト</button>}
+        {hoverHeader && onAddVariant && <button data-add-variant="true" title={"「" + hoverHeader.label + "」の別パターンを作る（今の内容を複製）"} onMouseLeave={() => setHoverLine(-1)} onMouseDown={(e) => e.preventDefault()} onClick={() => onAddVariant(hoverHeader.label)} className="lw-motion-fade" style={{ position: "absolute", left: hoverHeader.left, top: hoverHeader.top + (LH - 18) / 2, width: 18, height: 18, zIndex: 3, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0, fontSize: 9, fontFamily: mf, fontWeight: 600, color: hoverHeader.color, background: hoverHeader.color + "1a", border: "1px solid " + hoverHeader.color + "55", borderRadius: 2, cursor: "pointer" }}><Plus size={10} /></button>}
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
         <textarea ref={ta} value={text} onChange={(e) => { setText(e.target.value); setTimeout(uc, 0); }} onScroll={sync} onClick={uc} onKeyDown={onKeyDown} onKeyUp={uc} onSelect={uc} onContextMenu={onContextMenu} onMouseMove={(e) => { const l = lineFromEvent(e); if (l !== hoverLine) setHoverLine(l); }} onMouseLeave={(e) => { if (!e.relatedTarget?.closest?.("[data-add-variant]")) setHoverLine(-1); }} onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); updateCaret(); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop} spellCheck={false} wrap="off" style={{ width: "100%", height: "100%", fontFamily: ff, fontSize: 14, lineHeight: LH + "px", letterSpacing: "0.02em", caretColor: dragOver ? "transparent" : "#4af0a0", background: "transparent", color: "#c8ccd8", border: "none", outline: "none", resize: "none", padding: "16px 16px 16px 8px", overflow: "auto", whiteSpace: "pre" }} />
       </div>
@@ -507,8 +509,8 @@ function SectionNav({ text, sectionColors = SEC_C, onColorChange, activeLabel, h
   return (<div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}><span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>SECTIONS</span>{s.map((x, i) => {
     const label = x.label.trim();
     const isActive = activeLabel === label;
-    return (<label key={i} title="クリックで色変更" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
-      <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ width: 12, height: 12, padding: 0, border: "none", background: "transparent", cursor: "pointer" }} />{x.label}
+    return (<label key={i} title="クリックで色変更" style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5, fontSize: 10, fontFamily: mf, fontWeight: 500, color: x.color, background: x.color + (isActive ? "24" : "14"), border: "1px solid " + x.color + (isActive ? "80" : "40"), borderRadius: 2, padding: "2px 8px", cursor: "pointer" }}>
+      <input type="color" value={x.color} onChange={(e) => onColorChange?.(x.key, e.target.value)} style={{ position: "absolute", width: 1, height: 1, opacity: 0, pointerEvents: "none", left: 0, bottom: 0 }} />{x.label}
     </label>);
   })}
   {hasAnyVariants && <button title={compare ? "候補の見比べ表示を隠す" : "候補を本文の横に表示する"} onClick={onToggleCompare} style={{ marginLeft: "auto", background: compare ? "rgba(74,240,160,0.08)" : "transparent", border: "1px solid " + (compare ? "rgba(74,240,160,0.3)" : "#3a3a4a"), borderRadius: 2, padding: "2px 7px", cursor: "pointer", color: compare ? "#4af0a0" : "#7a7e8e", fontSize: 10, fontFamily: mf, display: "inline-flex", alignItems: "center", gap: 4 }}>{compare ? <Eye size={11} /> : <EyeOff size={11} />}見比べ</button>}
@@ -979,8 +981,10 @@ export default function LyricWorkspace() {
     const list = [...base, next];
     const nd = { ...drafts, [activeProj]: list };
     const nad = { ...activeDrafts, [activeProj]: next.id };
-    setDrafts(nd); setActiveDrafts(nad);
-    doSave({ drafts: nd, activeDrafts: nad });
+    // The new take starts with the same text and the same section variants as the current one.
+    const nsv = Object.keys(varStore).length ? { ...sectionVariants, [variantScope(activeProj, next.id)]: cloneVariantStore(varStore) } : sectionVariants;
+    setDrafts(nd); setActiveDrafts(nad); setSectionVariants(nsv);
+    doSave({ drafts: nd, activeDrafts: nad, sectionVariants: nsv });
   };
   const deleteDraft = (id) => {
     const base = drafts[activeProj]?.length ? drafts[activeProj] : draftList;
@@ -1809,7 +1813,7 @@ export default function LyricWorkspace() {
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           <SectionNav text={curText} sectionColors={sectionColors} onColorChange={updateSectionColor} activeLabel={caretSection} hasAnyVariants={hasAnyVariants} compare={layout.compare} onToggleCompare={() => setLayout((l) => ({ ...l, compare: !l.compare }))} />
           <div style={{ padding: "8px 16px", borderBottom: "1px solid #1a1a1a", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0, alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>DRAFTS</span>
+            <span style={{ fontSize: 10, color: "#4a4e5e", width: 54, flexShrink: 0 }}>TAKES</span>
             {draftList.map((d, i) => {
               const active = d.id === activeDraft.id;
               const color = active ? "#4af0a0" : "#7a7e8e";
@@ -1820,7 +1824,7 @@ export default function LyricWorkspace() {
                 </button>
               );
             })}
-            <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD DRAFT</button>
+            <button onClick={addDraft} style={{ ...btn, gap: 4, fontSize: 10, fontFamily: mf, fontWeight: 500, color: "#7a7e8e", background: "#7a7e8e14", border: "1px solid #7a7e8e40", borderRadius: 2, padding: "2px 8px" }}><Plus size={9} />ADD TAKE</button>
           </div>
           <LyricEditor text={curText} setText={setCurText} onContextMenu={onCtx} sectionColors={sectionColors} onCaretLine={setCaretLine} onKeyDown={onEditorKeyDown} apiRef={editorApiRef} ghosts={ghosts} onGhostApply={(id) => applyVariant(caretSection, id)} onGhostDelete={(id) => deleteVariant(caretSection, id)} onAddVariant={addVariant} />
 
