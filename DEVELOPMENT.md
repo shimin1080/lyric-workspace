@@ -88,6 +88,7 @@ The saved app data object uses:
 - `recLib`
 - `trash`
 - `sectionVariants` — per `"<projectId>:<draftId>"`, per `[Section]` label: `{ variants: [{ id, text }], activeId }`. The editor text is the source of truth; the active variant mirrors the section body in the text.
+- `editorTheme` — per project: `{ text, bg }` colors for the lyric body.
 
 ## Supabase Notes
 
