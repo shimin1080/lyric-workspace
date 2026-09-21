@@ -206,3 +206,8 @@ select:focus {
     transition-duration: 0.001ms !important;
   }
 }
+
+.lw-motion-right-sidebar[data-resizing="true"],
+.lw-motion-right-sidebar[data-resizing="true"] .lw-motion-right-sidebar-inner {
+  transition: none;
+}

@@ -241,7 +241,61 @@ const EMOJI_OPTS = ["🎵", "🎤", "🔥", "🧊", "🏚️", "🏀", "💀", "
 const ff = "'Courier New', 'JetBrains Mono', ui-monospace, Menlo, monospace";
 const mf = ff;
 
+/* ── Layout prefs (per device, not synced) ── */
+const LAYOUT_KEY = "lyric-workspace-layout-v1";
+const LAYOUT_DEFAULT = { rightWidth: 300, scrapRatio: 0.5 };
+const RIGHT_MIN = 220, RIGHT_MAX = 640, SCRAP_RATIO_MIN = 0.15, SCRAP_RATIO_MAX = 0.85;
+function loadLayoutPrefs() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    const p = raw ? JSON.parse(raw) : {};
+    return {
+      rightWidth: Math.min(RIGHT_MAX, Math.max(RIGHT_MIN, Number(p.rightWidth) || LAYOUT_DEFAULT.rightWidth)),
+      scrapRatio: Math.min(SCRAP_RATIO_MAX, Math.max(SCRAP_RATIO_MIN, Number(p.scrapRatio) || LAYOUT_DEFAULT.scrapRatio)),
+    };
+  } catch (e) { return { ...LAYOUT_DEFAULT }; }
+}
+function saveLayoutPrefs(p) { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(p)); } catch (e) {} }
+
 /* ── Sub-components ────────────────────────── */
+// Drag handle for resizing panels. axis: "x" (vertical bar, drag left/right) or "y" (horizontal bar, drag up/down).
+// onDrag receives the pointer delta from drag start; onStart/onEnd bracket the gesture.
+function ResizeHandle({ axis, onStart, onDrag, onEnd }) {
+  const [active, setActive] = useState(false);
+  const [hover, setHover] = useState(false);
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    setActive(true);
+    onStart?.();
+    const move = (ev) => onDrag(axis === "x" ? ev.clientX - startX : ev.clientY - startY);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setActive(false);
+      onEnd?.();
+    };
+    document.body.style.cursor = axis === "x" ? "col-resize" : "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+  const lit = active || hover;
+  const base = { position: "absolute", zIndex: 20, cursor: axis === "x" ? "col-resize" : "row-resize", touchAction: "none" };
+  const hit = axis === "x" ? { top: 0, bottom: 0, left: 0, width: 8 } : { left: 0, right: 0, top: -4, height: 9 };
+  const bar = axis === "x" ? { top: 0, bottom: 0, left: 0, width: 3 } : { left: 0, right: 0, top: 3, height: 3 };
+  return (
+    <div onPointerDown={onPointerDown} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)} style={{ ...base, ...hit }}>
+      <div style={{ position: "absolute", ...bar, background: lit ? "#4af0a0" : "transparent", opacity: active ? 1 : 0.6, transition: "background 120ms, opacity 120ms", pointerEvents: "none" }} />
+    </div>
+  );
+}
+
 function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
   const ta = useRef(null), gut = useRef(null);
   const [cl, setCl] = useState(0);
@@ -262,12 +316,75 @@ function LyricEditor({ text, setText, onContextMenu, sectionColors = SEC_C }) {
   };
   const sync = () => { if (ta.current && gut.current) gut.current.scrollTop = ta.current.scrollTop; updateCaret(); };
   const uc = () => { updateCaret(); };
+
+  // Line reordering: drag a line number in the gutter to move that line.
+  const [lineDrag, setLineDrag] = useState(null); // { from, to } — `to` is an insert-before index (0..lines)
+  const lineDragRef = useRef(null), textRef = useRef(text), autoScrollRef = useRef(0);
+  textRef.current = text;
+  const lineCount = () => textRef.current.split("\n").length;
+  const targetFromY = (clientY) => {
+    if (!gut.current) return 0;
+    const rect = gut.current.getBoundingClientRect();
+    const y = clientY - rect.top - 16 + (ta.current?.scrollTop || 0);
+    return Math.max(0, Math.min(lineCount(), Math.round(y / LH)));
+  };
+  const moveLine = (from, to) => {
+    const arr = textRef.current.split("\n");
+    if (from < 0 || from >= arr.length || to === from || to === from + 1) return;
+    const [line] = arr.splice(from, 1);
+    const ins = to > from ? to - 1 : to;
+    arr.splice(ins, 0, line);
+    setText(arr.join("\n"));
+    const pos = arr.slice(0, ins).reduce((n, l) => n + l.length + 1, 0);
+    const st = ta.current?.scrollTop || 0;
+    setTimeout(() => { const el = ta.current; if (!el) return; el.focus(); el.selectionStart = el.selectionEnd = pos; el.scrollTop = st; sync(); }, 0);
+  };
+  const onLinePointerDown = (i) => (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const start = { from: i, to: i };
+    lineDragRef.current = start; setLineDrag(start);
+    let lastY = e.clientY;
+    const update = (clientY) => {
+      const cur = lineDragRef.current; if (!cur) return;
+      const to = targetFromY(clientY);
+      if (to !== cur.to) { lineDragRef.current = { ...cur, to }; setLineDrag(lineDragRef.current); }
+    };
+    const tick = () => {
+      const el = ta.current; if (!el || !lineDragRef.current) return;
+      const rect = el.getBoundingClientRect();
+      const edge = 32;
+      let dy = 0;
+      if (lastY < rect.top + edge) dy = -Math.ceil((rect.top + edge - lastY) / 4);
+      else if (lastY > rect.bottom - edge) dy = Math.ceil((lastY - (rect.bottom - edge)) / 4);
+      if (dy) { el.scrollTop += dy; sync(); update(lastY); }
+      autoScrollRef.current = requestAnimationFrame(tick);
+    };
+    const move = (ev) => { lastY = ev.clientY; update(ev.clientY); };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      cancelAnimationFrame(autoScrollRef.current);
+      document.body.style.cursor = "";
+      const cur = lineDragRef.current; lineDragRef.current = null; setLineDrag(null);
+      if (cur) moveLine(cur.from, cur.to);
+    };
+    document.body.style.cursor = "grabbing";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+    autoScrollRef.current = requestAnimationFrame(tick);
+  };
+  const dropTop = lineDrag ? 16 + lineDrag.to * LH - (ta.current?.scrollTop || 0) : 0;
+  const showDrop = lineDrag && lineDrag.to !== lineDrag.from && lineDrag.to !== lineDrag.from + 1;
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); const d = e.dataTransfer.getData("text/plain"); if (!d || !ta.current) return; const el = ta.current; const pos = el.selectionStart; const before = text.substring(0, pos); const after = text.substring(pos); const ins = (before.length > 0 && !before.endsWith("\n") ? "\n" : "") + d + "\n"; setText(before + ins + after); setTimeout(() => { el.selectionStart = el.selectionEnd = pos + ins.length; el.focus(); }, 0); };
   return (
-    <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+    <div style={{ display: "flex", flex: 1, overflow: "hidden", position: "relative" }}>
+      {showDrop && <div style={{ position: "absolute", left: 0, right: 0, top: dropTop - 1, height: 2, background: "#4af0a0", zIndex: 4, pointerEvents: "none", boxShadow: "0 0 6px rgba(74,240,160,0.6)" }} />}
       <div ref={gut} style={{ flexShrink: 0, overflowY: "hidden", paddingTop: 16, paddingBottom: 16, userSelect: "none", display: "flex" }}>
         <div style={{ width: 3, flexShrink: 0 }}>{ls.map((l, i) => (<div key={i} style={{ height: LH, background: sm[i] || "transparent", opacity: getSecLabel(l) ? 1 : 0.4 }} />))}</div>
-        <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors); if (iS) { sectionLine = 0; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>); } sectionLine += 1; return (<div key={i} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400 }}>{sectionLine}</div>); })}</div>
+        <div style={{ width: 40 }}>{ls.map((l, i) => { const label = getSecLabel(l), iS = !!label, iA = i === cl, sc = getSecColor(l, sectionColors), iD = lineDrag?.from === i; const dragStyle = { cursor: lineDrag ? "grabbing" : "grab", touchAction: "none", background: iD ? "rgba(74,240,160,0.12)" : "transparent", borderRadius: 2 }; if (iS) { sectionLine = 0; return (<div key={i} title="ドラッグで行を移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 9, fontFamily: mf, textAlign: "right", paddingRight: 10, color: sc, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", ...dragStyle }}>{label}</div>); } sectionLine += 1; return (<div key={i} title="ドラッグで行を移動" onPointerDown={onLinePointerDown(i)} style={{ height: LH, lineHeight: LH + "px", fontSize: 11, fontFamily: mf, textAlign: "right", paddingRight: 10, color: iD ? "#4af0a0" : iA ? "#7a7e8e" : "#3a3a4a", fontWeight: 400, ...dragStyle }}>{sectionLine}</div>); })}</div>
       </div>
       <div style={{ flex: 1, position: "relative" }}>
         {dragOver && <div className="lw-drop-caret" style={{ position: "absolute", left: Math.max(8, caret.left), top: Math.max(16, caret.top), width: 3, height: caretH, borderRadius: 999, background: "#4af0a0", zIndex: 3, pointerEvents: "none" }} />}
@@ -353,6 +470,8 @@ export default function LyricWorkspace() {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [scrapsOpen, setScrapsOpen] = useState(true);
+  const [layout, setLayout] = useState(() => loadLayoutPrefs());
+  const [resizing, setResizing] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [seekPos, setSeekPos] = useState(0);
@@ -413,6 +532,23 @@ export default function LyricWorkspace() {
   stateRef.current = { projects, lyrics, cards, activeProj, audioLib, recLib, memo, drafts, activeDrafts, sectionColors, trash, projectList, projectFolders, __updatedAt: localUpdatedAtRef.current, __lastSyncedAt: localLastSyncedAtRef.current };
 
   const btn = { background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" };
+
+  // Panel resizing (right sidebar width / scrap-memo split)
+  const layoutStartRef = useRef(null);
+  const rightInnerRef = useRef(null);
+  useEffect(() => { saveLayoutPrefs(layout); }, [layout]);
+  const beginResize = (kind) => { layoutStartRef.current = { ...layout }; setResizing(kind); };
+  const endResize = () => setResizing(null);
+  const dragRightWidth = (dx) => {
+    const start = layoutStartRef.current?.rightWidth ?? layout.rightWidth;
+    setLayout((l) => ({ ...l, rightWidth: Math.min(RIGHT_MAX, Math.max(RIGHT_MIN, start - dx)) }));
+  };
+  const dragScrapSplit = (dy) => {
+    const h = rightInnerRef.current?.clientHeight || 0;
+    if (!h) return;
+    const start = layoutStartRef.current?.scrapRatio ?? layout.scrapRatio;
+    setLayout((l) => ({ ...l, scrapRatio: Math.min(SCRAP_RATIO_MAX, Math.max(SCRAP_RATIO_MIN, start + dy / h)) }));
+  };
 
   // Remote sync callback
   useEffect(() => {
@@ -1496,10 +1632,11 @@ export default function LyricWorkspace() {
         </div>
 
         {/* RIGHT SIDEBAR */}
-        <div className="lw-motion-right-sidebar" data-open={scrapsOpen ? "true" : "false"} style={{ width: scrapsOpen ? 300 : 0, flexShrink: 0, borderLeft: scrapsOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden", pointerEvents: scrapsOpen ? "auto" : "none" }}>
-          <div className="lw-motion-right-sidebar-inner" style={{ width: 300, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div className="lw-motion-right-sidebar" data-open={scrapsOpen ? "true" : "false"} data-resizing={resizing ? "true" : "false"} style={{ width: scrapsOpen ? layout.rightWidth : 0, flexShrink: 0, borderLeft: scrapsOpen ? "1px solid #2a2a35" : "1px solid transparent", background: "#0a0a0a", display: "flex", flexDirection: "column", overflow: "hidden", position: "relative", pointerEvents: scrapsOpen ? "auto" : "none" }}>
+          {scrapsOpen && <ResizeHandle axis="x" onStart={() => beginResize("right")} onDrag={dragRightWidth} onEnd={endResize} />}
+          <div ref={rightInnerRef} className="lw-motion-right-sidebar-inner" style={{ width: layout.rightWidth, height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
             {/* Scrap Notes */}
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+            <div style={{ flex: "0 0 " + (layout.scrapRatio * 100) + "%", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <Layers size={13} color="#4af0a0" /><span style={{ fontSize: 11, fontWeight: 500, color: "#c8ccd8" }}>スクラップノート</span><span style={{ fontSize: 9, color: "#4a4e5e", background: "#2a2a35", padding: "1px 5px", borderRadius: 2 }}>{filteredCards.length}</span>
@@ -1519,7 +1656,9 @@ export default function LyricWorkspace() {
                 {filteredCards.map((c) => (<ScrapCard key={c.id} card={c} onDelete={() => deleteCard(c.id)} />))}
               </div>
             </div>
-            <div style={{ height: 1, background: "#2a2a35", flexShrink: 0 }} />
+            <div style={{ height: 1, background: "#2a2a35", flexShrink: 0, position: "relative" }}>
+              <ResizeHandle axis="y" onStart={() => beginResize("split")} onDrag={dragScrapSplit} onEnd={endResize} />
+            </div>
             {/* Memo */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
               <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2a35", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}><FileText size={13} color="#4ade80" /><span style={{ fontSize: 11, fontWeight: 500, color: "#c8ccd8" }}>メモ</span></div>
